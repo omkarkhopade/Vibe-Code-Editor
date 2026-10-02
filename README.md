@@ -1,6 +1,6 @@
 # 🧠 Vibecode Editor – AI-Powered Web IDE
 
-![Vibecode Editor Thumbnail](public/vibe-code-editor-thumbnaail.svg)
+![Vibecode Editor Thumbnail](public/vibe-code-editor-thumbnail.svg)
 
 **Vibecode Editor** is a blazing-fast, AI-integrated web IDE built entirely in the browser using **Next.js App Router**, **WebContainers**, **Monaco Editor**, and **local LLMs via Ollama**. It offers real-time code execution, an AI-powered chat assistant, and support for multiple tech stacks — all wrapped in a stunning developer-first UI.
 
@@ -25,7 +25,7 @@
 
 | Layer         | Technology                                   |
 |---------------|----------------------------------------------|
-| Framework     | Next.js 15 (App Router)                      |
+| Framework     | Next.js 16 (App Router)                      |
 | Styling       | TailwindCSS, ShadCN UI                       |
 | Language      | TypeScript                                   |
 | Auth          | NextAuth (Google + GitHub OAuth)             |
@@ -44,12 +44,14 @@
 ```bash
 git clone https://github.com/your-username/vibecode-editor.git
 cd vibecode-editor
-````
+```
 
 ### 2. Install Dependencies
 
+Use Node.js 24 (see `.nvmrc`). Installation also generates the Prisma client.
+
 ```bash
-npm install
+npm ci
 ```
 
 ### 3. Set Up Environment Variables
@@ -69,8 +71,10 @@ AUTH_GOOGLE_SECRET=your_google_secret
 AUTH_GITHUB_ID=your_github_client_id
 AUTH_GITHUB_SECRET=your_github_secret
 DATABASE_URL=your_mongodb_connection_string
-NEXTAUTH_URL=http://localhost:3000
+AUTH_URL=http://localhost:3000
 ```
+
+Prisma and Next.js both load `.env.local`. The MongoDB schema includes the models used by authentication and the editor. After reviewing the schema against your database, run `npx prisma db push` to apply its indexes. MongoDB must use a replica set for Prisma transactions. The dependency upgrade does not apply database changes.
 
 ### 4. Start Local Ollama Model
 
@@ -119,4 +123,13 @@ This project is licensed under the [MIT License](LICENSE).
 * [xterm.js](https://xtermjs.org/)
 * [NextAuth.js](https://next-auth.js.org/)
 
+## Dependency maintenance
+
+See [DEPENDENCY_UPGRADE.md](DEPENDENCY_UPGRADE.md) for version constraints, migration details, and validation results.
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+npm audit
 ```

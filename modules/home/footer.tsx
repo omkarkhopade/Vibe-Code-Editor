@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Github as LucideGithub } from "lucide-react";
+import { GitBranch as LucideGithub } from "lucide-react";
 
 
 

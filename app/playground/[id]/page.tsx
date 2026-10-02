@@ -228,8 +228,8 @@ const MainPlaygroundPage = () => {
           }
         }
 
-           const newTemplateData = await saveTemplateData(updatedTemplateData);
-        setTemplateData(newTemplateData || updatedTemplateData);
+           await saveTemplateData(updatedTemplateData);
+        setTemplateData(updatedTemplateData);
 // Update open files
         const updatedOpenFiles = openFiles.map((f) =>
           f.id === targetFileId
@@ -490,10 +490,10 @@ const MainPlaygroundPage = () => {
                 </div>
                 <div className="flex-1">
                   <ResizablePanelGroup
-                    direction="horizontal"
+                    orientation="horizontal"
                     className="h-full"
                   >
-                    <ResizablePanel defaultSize={isPreviewVisible ? 50 : 100}>
+                    <ResizablePanel defaultSize={isPreviewVisible ? "50%" : "100%"}>
                       <PlaygroundEditor
                         activeFile={activeFile}
                         content={activeFile?.content || ""}
@@ -517,7 +517,7 @@ const MainPlaygroundPage = () => {
                     {isPreviewVisible && (
                       <>
                         <ResizableHandle />
-                        <ResizablePanel defaultSize={50}>
+                        <ResizablePanel defaultSize="50%">
                           <WebContainerPreview
                             templateData={templateData}
                             instance={instance}
