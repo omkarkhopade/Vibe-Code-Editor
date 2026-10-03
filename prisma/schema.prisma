@@ -31,6 +31,7 @@ model User {
 enum UserRole {
   USER
   ADMIN
+  PREMIUM_USER 
 }
 
 enum Template {
