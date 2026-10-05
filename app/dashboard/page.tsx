@@ -6,6 +6,7 @@ import ProjectTable from "@/modules/dashboard/components/project-table";
 import React from "react";
 
 const Page = async () => {
+
   const playgrounds = await getAllPlaygroundForUser();
   console.log("Playgrounds:", playgrounds);
   return (
@@ -29,6 +30,7 @@ const Page = async () => {
       </div>
     </div>
   );
+  
 };
 
 export default Page;

@@ -129,7 +129,7 @@ export const duplicateProjectById = async (id: string) => {
   try {
     const originalPlayground = await db.playground.findUnique({
       where: { id },
-      // todo: add tempalte files
+      // todo: add template files
     });
     if (!originalPlayground) {
       throw new Error("Original playground not found");

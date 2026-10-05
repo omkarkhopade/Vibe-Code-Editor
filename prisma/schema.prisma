@@ -109,6 +109,7 @@ model StarMark {
   userId       String
   playgroundId String
   isMarked     Boolean    @default(true)
+  createdAt    DateTime @default(now())
   user         User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   playground   Playground @relation(fields: [playgroundId], references: [id], onDelete: Cascade)
 
