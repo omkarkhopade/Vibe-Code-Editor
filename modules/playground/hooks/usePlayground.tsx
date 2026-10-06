@@ -5,18 +5,22 @@ import type { TemplateFolder } from "../lib/path-to-json";
 import { getPlaygroundById, SaveUpdatedCode } from "../actions";
 
 interface PlaygroundData {
+
   id: string;
   title?: string;
   [key: string]: any;
+
 }
 
 interface UsePlaygroundReturn {
+
   playgroundData: PlaygroundData | null;
   templateData: TemplateFolder | null;
   isLoading: boolean;
   error: string | null;
   loadPlayground: () => Promise<void>;
   saveTemplateData: (data: TemplateFolder) => Promise<void>;
+
 }
 
 export const usePlayground = (id: string): UsePlaygroundReturn => {
@@ -36,7 +40,7 @@ export const usePlayground = (id: string): UsePlaygroundReturn => {
 
       const data = await getPlaygroundById(id);
 
-      //   @ts-ignore
+      // @ts-ignore
       setPlaygroundData(data);
       const rawContent = data?.templateFiles?.[0]?.content;
 
@@ -47,7 +51,7 @@ export const usePlayground = (id: string): UsePlaygroundReturn => {
         return;
       }
 
-      //   load template from api if not in saved content
+      // load template from api if not in saved content
 
       const res = await fetch(`/api/template/${id}`);
 
