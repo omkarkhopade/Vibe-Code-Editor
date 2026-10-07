@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
+
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu" ;
+
 
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +46,7 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
   onToggle,
 
   suggestionLoading,
-  loadingProgress = 0,
+  loadingProgress=0,
   activeFeature,
 }) => {
   const [isChatOpen, setIsChatOpen] = useState(false);
