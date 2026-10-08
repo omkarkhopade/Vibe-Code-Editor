@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState, useRef } from "react";
 
 import { transformToWebContainerFormat } from "../hooks/transformer";
@@ -10,6 +11,7 @@ import { TemplateFolder } from "@/modules/playground/lib/path-to-json";
 import TerminalComponent from "./terminal";
 
 interface WebContainerPreviewProps {
+
   templateData: TemplateFolder;
   serverUrl: string;
   isLoading: boolean;
@@ -17,6 +19,7 @@ interface WebContainerPreviewProps {
   instance: WebContainer | null;
   writeFileSync: (path: string, content: string) => Promise<void>;
   forceResetup?: boolean; // Optional prop to force re-setup
+
 }
 const WebContainerPreview = ({
   templateData,
@@ -62,7 +65,8 @@ const WebContainerPreview = ({
 
   useEffect(() => {
     async function setupContainer() {
-      if (!instance || isSetupComplete || isSetupInProgress) return;
+      if (!instance || isSetupComplete || isSetupInProgress) 
+        return;
 
       try {
         setIsSetupInProgress(true);
