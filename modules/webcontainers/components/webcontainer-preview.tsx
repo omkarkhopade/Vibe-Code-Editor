@@ -69,8 +69,10 @@ const WebContainerPreview = ({
         return;
 
       try {
+
         setIsSetupInProgress(true);
         setSetupError(null);
+        
 
         try {
           const packageJsonExists = await instance.fs.readFile(
