@@ -1,53 +1,16 @@
 "use server";
-
 import { db } from "@/lib/db";
-import { TemplateFolder } from "../lib/path-to-json";
-import { currentUser } from "@/modules/auth/actions";
-
-
-
-
-
-export const getPlaygroundById = async(id:string)=>{
-    try {
-        const playground = await db.playground.findUnique({
-            where:{id},
-            select:{
-                title:true,
-                templateFiles:{
-                    select:{
-                        content:true
-                    }
-                }
-            }
-        })
-        return playground;
-    } catch (error) {
-        console.log(error)
-    }
+import type { TemplateFolder } from "../lib/path-to-json";
+import { isTemplateFolder } from "../lib/validation";
+import { requirePlaygroundOwner } from "@/lib/playground-access";
+export async function getPlaygroundById(id: string) {
+  const userId = await requirePlaygroundOwner(id);
+  return db.playground.findUnique({ where: { id, userId }, select: { id: true, title: true, templateFiles: { select: { content: true } } } });
 }
-
-export const SaveUpdatedCode = async(playgroundId:string , data:TemplateFolder)=>{
-    const user = await currentUser();
-  if (!user) return null;
-
-  try {
-    const updatedPlayground = await db.templateFile.upsert({
-        where:{
-            playgroundId
-        },
-        update:{
-            content:JSON.stringify(data)
-        },
-        create:{
-            playgroundId,
-            content:JSON.stringify(data)
-        }
-    })
-
-    return updatedPlayground;
-  } catch (error) {
-     console.log("SaveUpdatedCode error:", error);
-    return null;
-  }
+export async function SaveUpdatedCode(playgroundId: string, data: TemplateFolder) {
+  await requirePlaygroundOwner(playgroundId);
+  if (!isTemplateFolder(data)) throw new Error("Invalid template structure or project exceeds 4 MB");
+  const content = JSON.stringify(data);
+  // A failed write must reject so the editor never marks unsaved work as saved.
+  return db.templateFile.upsert({ where: { playgroundId }, update: { content }, create: { playgroundId, content } });
 }

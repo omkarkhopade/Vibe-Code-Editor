@@ -1,13 +1,11 @@
+import { z } from "zod";
+import { readAIRequest } from "@/modules/ai/lib/request";
+import { generateText } from "@/modules/ai/lib/ollama";
+import { ApiError, errorResponse } from "@/lib/api-error";
 import { type NextRequest, NextResponse } from "next/server";
 
 
-interface CodeSuggestionRequest {
-  fileContent: string;
-  cursorLine: number;
-  cursorColumn: number;
-  suggestionType: string;
-  fileName?: string;
-}
+const schema = z.object({ fileContent: z.string().max(64000), cursorLine: z.number().int().nonnegative(), cursorColumn: z.number().int().nonnegative(), suggestionType: z.string().min(1).max(80), fileName: z.string().max(255).optional() });
 
 interface CodeContext {
   language: string;
@@ -24,13 +22,15 @@ interface CodeContext {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: CodeSuggestionRequest = await request.json();
+    const parsed = schema.safeParse(await readAIRequest(request));
+    if (!parsed.success) throw new ApiError(400, "Invalid completion request");
+    const body = parsed.data;
 
     const { fileContent, cursorLine, cursorColumn, suggestionType, fileName } =
       body;
 
     // Validate input
-    if (!fileContent || cursorLine < 0 || cursorColumn < 0 || !suggestionType) {
+    if (cursorLine >= fileContent.split("\n").length || cursorColumn > fileContent.split("\n")[cursorLine].length) {
       return NextResponse.json(
         { error: "Invalid input parameters" },
         { status: 400 }
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     const prompt = buildPrompt(context, suggestionType);
 
-    const suggestion = await generateSuggestion(prompt);
+    const suggestion = await generateSuggestion(prompt, request.signal);
 
     return NextResponse.json({
       suggestion,
@@ -58,13 +58,7 @@ export async function POST(request: NextRequest) {
         generatedAt: new Date().toISOString(),
       },
     });
-  } catch (error: any) {
-    console.error("Context analysis error:", error);
-    return NextResponse.json(
-      { error: "Internal server error", message: error.message },
-      { status: 500 }
-    );
-  }
+  } catch (error) { return errorResponse(error); }
 }
 
 function analyzeCodeContext(
@@ -137,42 +131,10 @@ Instructions:
 Generate suggestion:`;
 }
 
-async function generateSuggestion(prompt: string): Promise<string> {
-  try {
-    const response = await fetch("http://localhost:11434/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-
-        model: "gpt-oss:20b",
-        prompt,
-        stream: false,
-        option: {
-          temperature: 0.7,
-          max_tokens: 300,
-          
-        },
-      }),
-    });
-
-       if (!response.ok) {
-      throw new Error(`AI service error: ${response.statusText}`)
-    }
-
-      const data = await response.json()
-    let suggestion = data.response
-
-     // Clean up the suggestion
-    if (suggestion.includes("```")) {
-      const codeMatch = suggestion.match(/```[\w]*\n?([\s\S]*?)```/)
-      suggestion = codeMatch ? codeMatch[1].trim() : suggestion
-    }
-
-    return suggestion
-  } catch (error) {
-      console.error("AI generation error:", error)
-    return "// AI suggestion unavailable"
-  }
+async function generateSuggestion(prompt: string, signal: AbortSignal): Promise<string> {
+  const suggestion = await generateText(prompt, signal);
+  const code = suggestion.match(/```[\w]*\n?([\s\S]*?)```/);
+  return code ? code[1].trim() : suggestion;
 }
 
 // Helper functions for code analysis

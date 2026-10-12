@@ -31,8 +31,8 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env
-.env*.local
+.env*
+!.env.example
 
 # vercel
 .vercel
@@ -45,4 +45,15 @@ next-env.d.ts
 
 /lib/generated/prisma
 
-vibecode-starters
+/vibecode-starters/*
+!/vibecode-starters/react-ts/
+!/vibecode-starters/nextjs/
+!/vibecode-starters/express-simple/
+!/vibecode-starters/vue/
+!/vibecode-starters/hono-nodejs-starter/
+!/vibecode-starters/angular/
+!/vibecode-starters/LICENSE
+
+.npm-cache/
+.eslint-audit.json
+.dependency-audit.json

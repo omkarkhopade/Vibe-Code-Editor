@@ -32,12 +32,12 @@ function RenameFileDialog({
   const [filename, setFilename] = React.useState(currentFilename);
   const [extension, setExtension] = React.useState(currentExtension);
 
-  React.useEffect(() => {
-    if (isOpen) {
-      setFilename(currentFilename);
-      setExtension(currentExtension);
-    }
-  }, [isOpen, currentFilename, currentExtension]);
+  const resetKey = String(isOpen) + currentFilename + "\0" + currentExtension;
+  const [previousKey, setPreviousKey] = React.useState(resetKey);
+  if (previousKey !== resetKey) {
+    setPreviousKey(resetKey);
+    if (isOpen) { setFilename(currentFilename); setExtension(currentExtension); }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

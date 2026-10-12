@@ -1,4 +1,6 @@
 "use client";
+import type { WebContainer, WebContainerProcess } from "@webcontainer/api";
+
 
 import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Terminal } from "@xterm/xterm";
@@ -10,43 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Copy, Trash2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface TerminalProps {
-  webcontainerUrl?: string;
-  className?: string;
-  theme?: "dark" | "light";
-  webContainerInstance?: any;
-}
-
-// Define the methods that will be exposed through the ref
-export interface TerminalRef {
-  writeToTerminal: (data: string) => void;
-  clearTerminal: () => void;
-  focusTerminal: () => void;
-}
-
-const 
-TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({ 
-  webcontainerUrl, 
-  className,
-  theme = "dark",
-  webContainerInstance
-}, ref) => {
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const term = useRef<Terminal | null>(null);
-  const fitAddon = useRef<FitAddon | null>(null);
-  const searchAddon = useRef<SearchAddon | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
-  
-  // Command line state
-  const currentLine = useRef<string>("");
-  const cursorPosition = useRef<number>(0);
-  const commandHistory = useRef<string[]>([]);
-  const historyIndex = useRef<number>(-1);
-  const currentProcess = useRef<any>(null);
-  const shellProcess = useRef<any>(null);
 
   const terminalThemes = {
     dark: {
@@ -96,6 +61,41 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
       brightWhite: "#FAFAFA",
     },
   };
+
+interface TerminalProps {
+  webcontainerUrl?: string;
+  className?: string;
+  theme?: "dark" | "light";
+  webContainerInstance?: WebContainer | null;
+}
+
+// Define the methods that will be exposed through the ref
+export interface TerminalRef {
+  writeToTerminal: (data: string) => void;
+  clearTerminal: () => void;
+  focusTerminal: () => void;
+}
+
+const TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
+  className,
+  theme = "dark",
+  webContainerInstance
+}, ref) => {
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const term = useRef<Terminal | null>(null);
+  const fitAddon = useRef<FitAddon | null>(null);
+  const searchAddon = useRef<SearchAddon | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+
+  // Command line state
+  const currentLine = useRef<string>("");
+  const cursorPosition = useRef<number>(0);
+  const commandHistory = useRef<string[]>([]);
+  const historyIndex = useRef<number>(-1);
+  const currentProcess = useRef<WebContainerProcess | null>(null);
+
 
   const writePrompt = useCallback(() => {
     if (term.current) {
@@ -178,13 +178,13 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
       }));
 
       // Wait for process to complete
-      const exitCode = await process.exit;
+      await process.exit;
       currentProcess.current = null;
 
       // Show new prompt
       writePrompt();
 
-    } catch (error) {
+    } catch {
       if (term.current) {
         term.current.writeln(`\r\nCommand not found: ${command}`);
         writePrompt();
@@ -201,19 +201,19 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
       case '\r': // Enter
         executeCommand(currentLine.current);
         break;
-        
+
       case '\u007F': // Backspace
         if (cursorPosition.current > 0) {
           currentLine.current = 
             currentLine.current.slice(0, cursorPosition.current - 1) + 
             currentLine.current.slice(cursorPosition.current);
           cursorPosition.current--;
-          
+
           // Update terminal display
           term.current.write('\b \b');
         }
         break;
-        
+
       case '\u0003': // Ctrl+C
         if (currentProcess.current) {
           currentProcess.current.kill();
@@ -222,7 +222,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
         term.current.writeln("^C");
         writePrompt();
         break;
-        
+
       case '\u001b[A': // Up arrow
         if (commandHistory.current.length > 0) {
           if (historyIndex.current === -1) {
@@ -230,7 +230,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
           } else if (historyIndex.current > 0) {
             historyIndex.current--;
           }
-          
+
           // Clear current line and write history command
           const historyCommand = commandHistory.current[historyIndex.current];
           term.current.write('\r$ ' + ' '.repeat(currentLine.current.length) + '\r$ ');
@@ -239,7 +239,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
           cursorPosition.current = historyCommand.length;
         }
         break;
-        
+
       case '\u001b[B': // Down arrow
         if (historyIndex.current !== -1) {
           if (historyIndex.current < commandHistory.current.length - 1) {
@@ -257,7 +257,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
           }
         }
         break;
-        
+
       default:
         // Regular character input
         if (data >= ' ' || data === '\t') {
@@ -298,7 +298,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
     terminal.loadAddon(searchAddonInstance);
 
     terminal.open(terminalRef.current);
-    
+
     fitAddon.current = fitAddonInstance;
     searchAddon.current = searchAddonInstance;
     term.current = terminal;
@@ -359,7 +359,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
     if (term.current) {
       const buffer = term.current.buffer.active;
       let content = "";
-      
+
       for (let i = 0; i < buffer.length; i++) {
         const line = buffer.getLine(i);
         if (line) {
@@ -403,9 +403,6 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
       resizeObserver.disconnect();
       if (currentProcess.current) {
         currentProcess.current.kill();
-      }
-      if (shellProcess.current) {
-        shellProcess.current.kill();
       }
       if (term.current) {
         term.current.dispose();
@@ -453,7 +450,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
               />
             </div>
           )}
-          
+
           <Button
             variant="ghost"
             size="sm"
@@ -462,7 +459,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
           >
             <Search className="h-3 w-3" />
           </Button>
-          
+
           <Button
             variant="ghost"
             size="sm"
@@ -471,7 +468,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
           >
             <Copy className="h-3 w-3" />
           </Button>
-          
+
           <Button
             variant="ghost"
             size="sm"
@@ -480,7 +477,7 @@ TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({
           >
             <Download className="h-3 w-3" />
           </Button>
-          
+
           <Button
             variant="ghost"
             size="sm"

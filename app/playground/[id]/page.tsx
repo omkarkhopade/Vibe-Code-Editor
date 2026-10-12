@@ -28,30 +28,16 @@ import ToggleAI from "@/modules/playground/components/toggle-ai";
 import { useAISuggestions } from "@/modules/playground/hooks/useAISuggestion";
 import { useFileExplorer } from "@/modules/playground/hooks/useFileExplorer";
 import { usePlayground } from "@/modules/playground/hooks/usePlayground";
-import { findFilePath } from "@/modules/playground/lib";
+import { updateFilesByPath } from "@/modules/playground/lib";
 import {
   TemplateFile,
   TemplateFolder,
 } from "@/modules/playground/lib/path-to-json";
 import WebContainerPreview from "@/modules/webcontainers/components/webcontainer-preview";
 import { useWebContainer } from "@/modules/webcontainers/hooks/useWebContainer";
-import {
-  AlertCircle,
-  Bot,
-  FileText,
-  FolderOpen,
-  Save,
-  Settings,
-  X,
-} from "lucide-react";
+import { AlertCircle, FileText, FolderOpen, Save, Settings, X } from "lucide-react";
 import { useParams } from "next/navigation";
-import React, {
-  useCallback,
-  useEffect,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const MainPlaygroundPage = () => {
@@ -89,8 +75,7 @@ const MainPlaygroundPage = () => {
     error: containerError,
     instance,
     writeFileSync,
-    // @ts-ignore
-  } = useWebContainer({ templateData });
+  } = useWebContainer({ templateData, playgroundId: id });
 
   const lastSyncedContent = useRef<Map<string, string>>(new Map());
 
@@ -176,117 +161,40 @@ const MainPlaygroundPage = () => {
     openFile(file);
   };
 
-  const handleSave = useCallback(
-    async (fileId?: string) => {
-      const targetFileId = fileId || activeFileId;
-      if (!targetFileId) return;
-
-      const fileToSave = openFiles.find((f) => f.id === targetFileId);
-
-      if (!fileToSave) return;
-
-      const latestTemplateData = useFileExplorer.getState().templateData;
-      if (!latestTemplateData) return
-
-      try {
-            const filePath = findFilePath(fileToSave, latestTemplateData);
-        if (!filePath) {
-          toast.error(
-            `Could not find path for file: ${fileToSave.filename}.${fileToSave.fileExtension}`
-          );
-          return;
-        }
-
-   const updatedTemplateData = JSON.parse(
-          JSON.stringify(latestTemplateData)
-        );
-
-        // @ts-ignore
-          const updateFileContent = (items: any[]) =>
-            // @ts-ignore
-          items.map((item) => {
-            if ("folderName" in item) {
-              return { ...item, items: updateFileContent(item.items) };
-            } else if (
-              item.filename === fileToSave.filename &&
-              item.fileExtension === fileToSave.fileExtension
-            ) {
-              return { ...item, content: fileToSave.content };
-            }
-            return item;
-          });
-        updatedTemplateData.items = updateFileContent(
-          updatedTemplateData.items
-        );
-
-          // Sync with WebContainer
-        if (writeFileSync) {
-          await writeFileSync(filePath, fileToSave.content);
-          lastSyncedContent.current.set(fileToSave.id, fileToSave.content);
-          if (instance && instance.fs) {
-            await instance.fs.writeFile(filePath, fileToSave.content);
-          }
-        }
-
-           await saveTemplateData(updatedTemplateData);
-        setTemplateData(updatedTemplateData);
-// Update open files
-        const updatedOpenFiles = openFiles.map((f) =>
-          f.id === targetFileId
-            ? {
-                ...f,
-                content: fileToSave.content,
-                originalContent: fileToSave.content,
-                hasUnsavedChanges: false,
-              }
-            : f
-        );
-        setOpenFiles(updatedOpenFiles);
-
-    toast.success(
-          `Saved ${fileToSave.filename}.${fileToSave.fileExtension}`
-        );
-      } catch (error) {
-         console.error("Error saving file:", error);
-        toast.error(
-          `Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`
-        );
-        throw error;
-      }
-    },
-    [
-      activeFileId,
-      openFiles,
-      writeFileSync,
-      instance,
-      saveTemplateData,
-      setTemplateData,
-      setOpenFiles,
-    ]
-  );
-
-    const handleSaveAll = async () => {
-    const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges);
-
-    if (unsavedFiles.length === 0) {
-      toast.info("No unsaved changes");
-      return;
-    }
-
+  const saving = useRef(false);
+  const handleSave = useCallback(async (fileId?: string) => {
+    if (saving.current) return;
+    const snapshot = useFileExplorer.getState();
+    if (!snapshot.templateData) return;
+    const targets = fileId === "*" ? snapshot.openFiles.filter(file => file.hasUnsavedChanges) : snapshot.openFiles.filter(file => file.id === (fileId || snapshot.activeFileId));
+    if (!targets.length) return;
+    saving.current = true;
     try {
-      await Promise.all(unsavedFiles.map((f) => handleSave(f.id)));
-      toast.success(`Saved ${unsavedFiles.length} file(s)`);
-    } catch (error) {
-      toast.error("Failed to save some files");
-    }
-  };
+      const updates = new Map(targets.map(file => [file.id, file.content]));
+      const updated = updateFilesByPath(snapshot.templateData, updates);
+      await saveTemplateData(updated);
+      if (useFileExplorer.getState().playgroundId !== id) return;
+      setTemplateData(updated);
+      setOpenFiles(useFileExplorer.getState().openFiles.map(file => {
+        const saved = updates.get(file.id);
+        return saved === undefined ? file : { ...file, originalContent: saved, hasUnsavedChanges: file.content !== saved };
+      }));
+      if (instance) {
+        try {
+          for (const file of targets) { await writeFileSync(file.id, file.content); lastSyncedContent.current.set(file.id, file.content); }
+        } catch { toast.error("Changes saved, but preview synchronization failed. Reload the preview."); }
+      }
+    } catch { toast.error("Failed to save changes. Your edits are still open."); }
+    finally { saving.current = false; }
+  }, [id, instance, saveTemplateData, setTemplateData, setOpenFiles, writeFileSync]);
+  const handleSaveAll = () => handleSave("*");
 
 
   useEffect(()=>{
     const handleKeyDown = (e:KeyboardEvent)=>{
       if(e.ctrlKey && e.key === "s"){
         e.preventDefault()
-        handleSave()
+        void handleSave().catch(() => {});
       }
     }
      window.addEventListener("keydown", handleKeyDown);
@@ -518,7 +426,7 @@ const MainPlaygroundPage = () => {
                       <>
                         <ResizableHandle />
                         <ResizablePanel defaultSize="50%">
-                          <WebContainerPreview
+                          <WebContainerPreview key={id}
                             templateData={templateData}
                             instance={instance}
                             writeFileSync={writeFileSync}

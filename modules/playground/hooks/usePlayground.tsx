@@ -1,112 +1,52 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
-
 import type { TemplateFolder } from "../lib/path-to-json";
+import { isTemplateFolder } from "../lib/validation";
 import { getPlaygroundById, SaveUpdatedCode } from "../actions";
-
-interface PlaygroundData {
-
-  id: string;
-  title?: string;
-  [key: string]: any;
-
-}
-
-interface UsePlaygroundReturn {
-
-  playgroundData: PlaygroundData | null;
-  templateData: TemplateFolder | null;
-  isLoading: boolean;
-  error: string | null;
-  loadPlayground: () => Promise<void>;
-  saveTemplateData: (data: TemplateFolder) => Promise<void>;
-
-}
-
-export const usePlayground = (id: string): UsePlaygroundReturn => {
-  const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(
-    null
-  );
+type PlaygroundData = NonNullable<Awaited<ReturnType<typeof getPlaygroundById>>>;
+export const usePlayground = (id: string) => {
+  const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(null);
   const [templateData, setTemplateData] = useState<TemplateFolder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+  const pending = useRef<AbortController | null>(null);
   const loadPlayground = useCallback(async () => {
-    if (!id) return;
-
+    pending.current?.abort();
+    const controller = new AbortController();
+    pending.current = controller;
+    setIsLoading(true); setError(null); setPlaygroundData(null); setTemplateData(null);
     try {
-      setIsLoading(true);
-      setError(null);
-
+      if (!id) throw new Error("Missing playground ID");
       const data = await getPlaygroundById(id);
-
-      // @ts-ignore
-      setPlaygroundData(data);
-      const rawContent = data?.templateFiles?.[0]?.content;
-
-      if (typeof rawContent === "string") {
-        const parsedContent = JSON.parse(rawContent);
-        setTemplateData(parsedContent);
-        toast.success("playground loaded successfully");
-        return;
+      if (controller.signal.aborted) return;
+      if (!data) throw new Error("Playground not found");
+      const rawContent = data.templateFiles[0]?.content;
+      let template: unknown;
+      if (typeof rawContent === "string") template = JSON.parse(rawContent);
+      else {
+        const response = await fetch("/api/template/" + encodeURIComponent(id), { signal: controller.signal });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Failed to load template");
+        template = body.templateJson;
       }
-
-      // load template from api if not in saved content
-
-      const res = await fetch(`/api/template/${id}`);
-
-      if (!res.ok) throw new Error(`Failed to load template: ${res.status}`);
-
-      const templateRes = await res.json();
-
-      if (templateRes.templateJson && Array.isArray(templateRes.templateJson)) {
-        setTemplateData({
-          folderName: "Root",
-          items: templateRes.templateJson,
-        });
-      } else {
-        setTemplateData(
-          templateRes.templateJson || {
-            folderName: "Root",
-            items: [],
-          }
-        );
-      }
+      if (controller.signal.aborted) return;
+      if (!isTemplateFolder(template)) throw new Error("Saved template is invalid. Your saved data has not been overwritten.");
+      setPlaygroundData(data); setTemplateData(template);
       toast.success("Template loaded successfully");
-    } catch (error) {
-      console.error("Error loading playground:", error);
-      setError("Failed to load playground data");
-      toast.error("Failed to load playground data");
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (failure) {
+      if (controller.signal.aborted) return;
+      const message = failure instanceof Error ? failure.message : "Failed to load playground data";
+      setError(message); toast.error(message);
+    } finally { if (!controller.signal.aborted) setIsLoading(false); }
   }, [id]);
-
-
-
-  const saveTemplateData = useCallback(async(data:TemplateFolder)=>{
-    try {
-          await SaveUpdatedCode(id, data);
-      setTemplateData(data);
-      toast.success("Changes saved successfully");
-    } catch (error) {
-         console.error("Error saving template data:", error);
-      toast.error("Failed to save changes");
-      throw error;
-    }
-  },[id])
-
-
-  useEffect(()=>{
-    loadPlayground()
-  },[loadPlayground])
-
-    return {
-    playgroundData,
-    templateData,
-    isLoading,
-    error,
-    loadPlayground,
-    saveTemplateData,
-  };
+  const saveTemplateData = useCallback(async (data: TemplateFolder) => {
+    const loadAtSave = pending.current;
+    try { await SaveUpdatedCode(id, data); if (pending.current !== loadAtSave || loadAtSave?.signal.aborted) return; setTemplateData(data); toast.success("Changes saved successfully"); }
+    catch (failure) { toast.error("Failed to save changes"); throw failure; }
+  }, [id]);
+  useEffect(() => {
+    const timer = setTimeout(() => { void loadPlayground(); }, 0);
+    return () => { clearTimeout(timer); pending.current?.abort(); };
+  }, [loadPlayground]);
+  return { playgroundData, templateData, isLoading, error, loadPlayground, saveTemplateData };
 };

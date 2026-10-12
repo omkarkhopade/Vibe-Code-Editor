@@ -10,7 +10,6 @@ export default async function DashboardLayout({
 
     const playgroundData = await getAllPlaygroundForUser();
 
-    console.log("playgroundData", playgroundData);
 
   const technologyIconMap: Record<string, string> = {
     REACT: "Zap",
@@ -32,10 +31,9 @@ export default async function DashboardLayout({
   return (
 
   <SidebarProvider>
-    
+
     <div className="flex min-h-screen w-full overflow-x-hidden">
       {/* Dashboard Sidebar */}
-      {/* @ts-ignore */}
       <DashboardSidebar initialPlaygroundData={formattedPlaygroundData}/>
       <main className="flex-1">{children}</main>
     </div>

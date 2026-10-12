@@ -32,6 +32,7 @@ export default auth((req) => {
   }
 
   if (!isLoggedIn && !isPublicRoute) {
+    if (nextUrl.pathname.startsWith("/api/")) return Response.json({ error: "Authentication required" }, { status: 401 });
     return Response.redirect(new URL("/auth/sign-in", nextUrl));
   }
 

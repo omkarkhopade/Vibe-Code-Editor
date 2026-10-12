@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -20,7 +20,7 @@ import {
   Database,
   FlameIcon,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+
 import {
   Sidebar,
   SidebarContent,
@@ -59,8 +59,8 @@ const lucideIconMap: Record<string, LucideIcon> = {
 
 export function DashboardSidebar({ initialPlaygroundData }: { initialPlaygroundData: PlaygroundData[] }) {
   const pathname = usePathname()
-  const [starredPlaygrounds, setStarredPlaygrounds] = useState(initialPlaygroundData.filter((p) => p.starred))
-  const [recentPlaygrounds, setRecentPlaygrounds] = useState(initialPlaygroundData)
+  const starredPlaygrounds = initialPlaygroundData.filter((p) => p.starred)
+  const recentPlaygrounds = initialPlaygroundData
 
   return (
     <Sidebar variant="inset" collapsible="icon" className="border-1 border-r">
@@ -68,7 +68,7 @@ export function DashboardSidebar({ initialPlaygroundData }: { initialPlaygroundD
         <div className="flex items-center gap-2 px-4 py-3 justify-center">
           <Image src={"/logo.svg"} alt="logo" height={60} width={60} />
         </div>
-       
+
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -89,7 +89,7 @@ export function DashboardSidebar({ initialPlaygroundData }: { initialPlaygroundD
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-          
+
           </SidebarMenu>
         </SidebarGroup>
 

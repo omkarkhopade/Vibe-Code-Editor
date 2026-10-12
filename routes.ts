@@ -5,7 +5,8 @@
  */
 
 export const publicRoutes: string[] = [
-   
+    "/api/health",
+
 ]
 
 /**
@@ -16,7 +17,7 @@ export const publicRoutes: string[] = [
 
 export const protectedRoutes: string[] = [
     "/",
-    
+
 ]
 
 /**
@@ -27,7 +28,7 @@ export const protectedRoutes: string[] = [
 
 export const authRoutes: string[] = [
     "/auth/sign-in",   // Added leading slash
-   
+
 ]
 
 /**

@@ -1,3 +1,4 @@
+import type { WebContainer } from "@webcontainer/api";
 import { create } from "zustand";
 import { toast } from "sonner";
 
@@ -36,14 +37,14 @@ interface FileExplorerState {
     newFile: TemplateFile,
     parentPath: string,
     writeFileSync: (filePath: string, content: string) => Promise<void>,
-    instance: any,
+    instance: WebContainer | null,
     saveTemplateData: (data: TemplateFolder) => Promise<void>
   ) => Promise<void>;
 
   handleAddFolder: (
     newFolder: TemplateFolder, 
     parentPath: string, 
-    instance: any, 
+    instance: WebContainer | null,
     saveTemplateData: (data: TemplateFolder) => Promise<void>
   ) => Promise<void>;
 
@@ -70,11 +71,10 @@ interface FileExplorerState {
     parentPath: string,
     saveTemplateData: (data: TemplateFolder) => Promise<void>
   ) => Promise<void>;
-  
+
   updateFileContent: (fileId: string, content: string) => void;
 }
 
-// @ts-ignore
 export const useFileExplorer = create<FileExplorerState>((set, get) => ({
   templateData: null,
   playgroundId: "",
@@ -84,7 +84,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
 
   setTemplateData: (data) => set({ templateData: data }),
   setPlaygroundId(id) {
-    set({ playgroundId: id });
+    if (get().playgroundId !== id) set({ playgroundId: id, templateData: null, openFiles: [], activeFileId: null, editorContent: "" });
   },
   setEditorContent: (content) => set({ editorContent: content }),
   setOpenFiles: (files) => set({ openFiles: files }),
@@ -140,7 +140,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
         activeFileId:newActiveFileId,
         editorContent:newEditorContent
     })
-    
+
   },
     closeAllFiles: () => {
     set({
@@ -164,22 +164,23 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           const nextFolder = currentFolder.items.find(
             (item) => "folderName" in item && item.folderName === part
           ) as TemplateFolder;
-          if (nextFolder) currentFolder = nextFolder;
+          if (!nextFolder) throw new Error("Parent folder not found");
+          currentFolder = nextFolder;
         }
       }
 
       currentFolder.items.push(newFile);
+      await saveTemplateData(updatedTemplateData);
       set({ templateData: updatedTemplateData });
-      toast.success(`Created file: ${newFile.filename}.${newFile.fileExtension}`);
+      toast.success(`Created file: ${newFile.filename}${newFile.fileExtension ? "." + newFile.fileExtension : ""}`);
 
       // Use the passed saveTemplateData function
-      await saveTemplateData(updatedTemplateData);
 
       // Sync with web container
       if (writeFileSync) {
         const filePath = parentPath
-          ? `${parentPath}/${newFile.filename}.${newFile.fileExtension}`
-          : `${newFile.filename}.${newFile.fileExtension}`;
+          ? `${parentPath}/${newFile.filename}${newFile.fileExtension ? "." + newFile.fileExtension : ""}`
+          : `${newFile.filename}${newFile.fileExtension ? "." + newFile.fileExtension : ""}`;
         await writeFileSync(filePath, newFile.content || "");
       }
 
@@ -204,16 +205,17 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           const nextFolder = currentFolder.items.find(
             (item) => "folderName" in item && item.folderName === part
           ) as TemplateFolder;
-          if (nextFolder) currentFolder = nextFolder;
+          if (!nextFolder) throw new Error("Parent folder not found");
+          currentFolder = nextFolder;
         }
       }
 
       currentFolder.items.push(newFolder);
+      await saveTemplateData(updatedTemplateData);
       set({ templateData: updatedTemplateData });
       toast.success(`Created folder: ${newFolder.folderName}`);
 
       // Use the passed saveTemplateData function
-      await saveTemplateData(updatedTemplateData);
 
       // Sync with web container
       if (instance && instance.fs) {
@@ -244,7 +246,8 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           const nextFolder = currentFolder.items.find(
             (item) => "folderName" in item && item.folderName === part
           ) as TemplateFolder;
-          if (nextFolder) currentFolder = nextFolder;
+          if (!nextFolder) throw new Error("Parent folder not found");
+          currentFolder = nextFolder;
         }
       }
 
@@ -255,11 +258,12 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           item.fileExtension !== file.fileExtension
       );
 
+      await saveTemplateData(updatedTemplateData);
       // Find and close the file if it's open
       // Use the same ID generation logic as in openFile
       const fileId = generateFileId(file, templateData);
       const openFile = openFiles.find((f) => f.id === fileId);
-      
+
       if (openFile) {
         // Close the file using the closeFile method
         get().closeFile(fileId);
@@ -268,7 +272,6 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
       set({ templateData: updatedTemplateData });
 
       // Use the passed saveTemplateData function
-      await saveTemplateData(updatedTemplateData);
       toast.success(`Deleted file: ${file.filename}.${file.fileExtension}`);
     } catch (error) {
       console.error("Error deleting file:", error);
@@ -292,7 +295,8 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           const nextFolder = currentFolder.items.find(
             (item) => "folderName" in item && item.folderName === part
           ) as TemplateFolder;
-          if (nextFolder) currentFolder = nextFolder;
+          if (!nextFolder) throw new Error("Parent folder not found");
+          currentFolder = nextFolder;
         }
       }
 
@@ -301,6 +305,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           !("folderName" in item) || item.folderName !== folder.folderName
       );
 
+      await saveTemplateData(updatedTemplateData);
       // Close all files in the deleted folder recursively
       const closeFilesInFolder = (folder: TemplateFolder, currentPath: string = "") => {
         folder.items.forEach((item) => {
@@ -314,13 +319,12 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           }
         });
       };
-      
+
       closeFilesInFolder(folder, parentPath ? `${parentPath}/${folder.folderName}` : folder.folderName);
 
       set({ templateData: updatedTemplateData });
 
       // Use the passed saveTemplateData function
-      await saveTemplateData(updatedTemplateData);
       toast.success(`Deleted folder: ${folder.folderName}`);
     } catch (error) {
       console.error("Error deleting folder:", error);
@@ -340,8 +344,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
 
     // Generate old and new file IDs using the same logic as openFile
     const oldFileId = generateFileId(file, templateData);
-    const newFile = { ...file, filename: newFilename, fileExtension: newExtension };
-    const newFileId = generateFileId(newFile, templateData);
+    const newFileId = [parentPath, newFilename + (newExtension ? "." + newExtension : "")].filter(Boolean).join("/");
 
     try {
       const updatedTemplateData = JSON.parse(
@@ -355,7 +358,8 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           const nextFolder = currentFolder.items.find(
             (item) => "folderName" in item && item.folderName === part
           ) as TemplateFolder;
-          if (nextFolder) currentFolder = nextFolder;
+          if (!nextFolder) throw new Error("Parent folder not found");
+          currentFolder = nextFolder;
         }
       }
 
@@ -373,6 +377,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           fileExtension: newExtension,
         } as TemplateFile;
         currentFolder.items[fileIndex] = updatedFile;
+        await saveTemplateData(updatedTemplateData);
 
         // Update open files with new ID and names
         const updatedOpenFiles = openFiles.map((f) =>
@@ -393,8 +398,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
         });
 
         // Use the passed saveTemplateData function
-        await saveTemplateData(updatedTemplateData);
-        toast.success(`Renamed file to: ${newFilename}.${newExtension}`);
+          toast.success(`Renamed file to: ${newFilename}.${newExtension}`);
       }
     } catch (error) {
       console.error("Error renaming file:", error);
@@ -402,7 +406,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
     }
   },
 
-  
+
   handleRenameFolder: async (folder, newFolderName, parentPath, saveTemplateData) => {
     const { templateData } = get();
     if (!templateData) return;
@@ -419,7 +423,8 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           const nextFolder = currentFolder.items.find(
             (item) => "folderName" in item && item.folderName === part
           ) as TemplateFolder;
-          if (nextFolder) currentFolder = nextFolder;
+          if (!nextFolder) throw new Error("Parent folder not found");
+          currentFolder = nextFolder;
         }
       }
 
@@ -433,12 +438,16 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
           folderName: newFolderName,
         } as TemplateFolder;
         currentFolder.items[folderIndex] = updatedFolder;
+        await saveTemplateData(updatedTemplateData);
+        const oldPrefix = [parentPath, folder.folderName].filter(Boolean).join("/") + "/";
+        const newPrefix = [parentPath, newFolderName].filter(Boolean).join("/") + "/";
+        const renamedPath = (value: string) => value.startsWith(oldPrefix) ? newPrefix + value.slice(oldPrefix.length) : value;
+        set(state => ({ openFiles: state.openFiles.map(file => ({ ...file, id: renamedPath(file.id) })), activeFileId: state.activeFileId ? renamedPath(state.activeFileId) : null }));
 
         set({ templateData: updatedTemplateData });
 
         // Use the passed saveTemplateData function
-        await saveTemplateData(updatedTemplateData);
-        toast.success(`Renamed folder to: ${newFolderName}`);
+          toast.success(`Renamed folder to: ${newFolderName}`);
       }
     } catch (error) {
       console.error("Error renaming folder:", error);

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import type { Project } from "../types";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -63,7 +63,7 @@ interface ProjectTableProps {
   ) => Promise<void>;
   onDeleteProject?: (id: string) => Promise<void>;
   onDuplicateProject?: (id: string) => Promise<unknown>;
-  
+
 }
 
 interface EditProjectData {
@@ -86,7 +86,7 @@ export default function ProjectTable({
     description: "",
   });
   const [isLoading, setIsLoading] = useState(false);
- 
+
 
   const handleEditClick = (project: Project) => {
     setSelectedProject(project);
@@ -99,7 +99,7 @@ export default function ProjectTable({
 
   const handleDeleteClick = async (project: Project) => {
     setSelectedProject(project); 
-    
+
     setDeleteDialogOpen(true);
   };
 
@@ -120,9 +120,7 @@ export default function ProjectTable({
     }
   };
 
-  const handleMarkasFavorite = async (project: Project) => {
-    //    Write your logic here
-  };
+
 
   const handleDeleteProject = async () => {
     if (!selectedProject || !onDeleteProject) return;
@@ -291,7 +289,7 @@ export default function ProjectTable({
           <DialogHeader>
             <DialogTitle>Edit Project</DialogTitle>
             <DialogDescription>
-              Make changes to your project details here. Click save when you're
+              Make changes to your project details here. Click save when you&apos;re
               done.
             </DialogDescription>
           </DialogHeader>
@@ -349,7 +347,7 @@ export default function ProjectTable({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Project</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{selectedProject?.title}"? This
+              Are you sure you want to delete &quot;{selectedProject?.title}&quot;? This
               action cannot be undone. All files and data associated with this
               project will be permanently removed.
             </AlertDialogDescription>

@@ -1,4 +1,5 @@
-"use client";
+"use client"
+import { readNDJSON } from "@/modules/ai/lib/ndjson";;
 
 import type React from "react";
 import { useState, useEffect, useRef } from "react";
@@ -47,7 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import "katex/dist/katex.min.css";
 import Image from "next/image";
-import Stream from "stream";
+
 
 interface ChatMessage {
     role: "user" | "assistant";
@@ -125,6 +126,8 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
     const [streamResponse, setStreamResponse] = useState(true);
     const [model, setModel] = useState<string>("gpt-6");
 
+    const pendingRequest = useRef<AbortController | null>(null);
+    useEffect(() => () => pendingRequest.current?.abort(), []);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -155,7 +158,9 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
 
    const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || pendingRequest.current) return;
+    const controller = new AbortController();
+    pendingRequest.current = controller;
 
     const messageType =
       chatMode === "chat"
@@ -183,6 +188,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
 
       const response = await fetch("/api/chat", {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
         },
@@ -198,7 +204,21 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
         }),
       });
 
-      if (response.ok) {
+      if (response.ok && response.headers.get("content-type")?.includes("application/x-ndjson")) {
+        if (!response.body) throw new Error("Missing AI stream");
+        const responseId = crypto.randomUUID();
+        let content = ""; let complete = false;
+        setMessages(previous => [...previous, { role: "assistant", content: "", timestamp: new Date(), id: responseId, type: messageType }]);
+        await readNDJSON(response.body, value => {
+          if (!value || typeof value !== "object") throw new Error("Invalid AI response");
+          const part = value as { token?: string; error?: string; done?: boolean };
+          if (part.error) { content += "\n\n" + part.error; complete = true; }
+          if (typeof part.token === "string") content += part.token;
+          if (part.done) complete = true;
+          setMessages(previous => previous.map(message => message.id === responseId ? { ...message, content } : message));
+        });
+        if (!complete) throw new Error("AI stream interrupted");
+      } else if (response.ok) {
         const data = await response.json();
 
         setMessages((prev) => [
@@ -225,8 +245,8 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
           },
         ]);
       }
-    } catch (error) {
-      console.error("Error sending message:", error);
+    } catch {
+      if (controller.signal.aborted) return;
       setMessages((prev) => [
         ...prev,
         {
@@ -238,7 +258,8 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
         },
       ]);
     } finally {
-      setIsLoading(false);
+      pendingRequest.current = null;
+      if (!controller.signal.aborted) setIsLoading(false);
     }
   };
 
@@ -354,7 +375,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                         {/* Enhanced Controls */}
                         <Tabs
                             value={chatMode}
-                            onValueChange={(value) => setChatMode(value as any)}
+                            onValueChange={(value) => setChatMode(value as typeof chatMode)}
                             className="px-6"
                         >
                             <div className="flex items-center justify-between mb-4">
@@ -612,7 +633,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyDown={(e) => {
                                         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                                            handleSendMessage(e as any);
+                                            handleSendMessage(e);
                                         }
                                     }}
                                     disabled={isLoading}

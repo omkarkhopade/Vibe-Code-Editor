@@ -7,7 +7,7 @@ export interface User {
     createdAt: Date
     updatedAt: Date
   }
-  
+
   export interface Project {
     id: string
     title: string
@@ -16,7 +16,6 @@ export interface User {
     createdAt: Date
     updatedAt: Date
     userId: string
-    user: User
+    user: Pick<User, "id" | "name" | "image">
     Starmark: { isMarked: boolean }[]
   }
-  

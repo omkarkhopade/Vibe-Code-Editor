@@ -15,17 +15,7 @@ import {
 
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Bot, 
-  Code, 
-  FileText, 
-  Import, 
-  Loader2,
-  Power,
-  PowerOff,
-  Braces,
-  Variable
-} from "lucide-react";
+import { Bot, FileText, Loader2, Power, PowerOff } from "lucide-react";
 import React from "react";
 import { cn } from "@/lib/utils";
 import { AIChatSidePanel } from "@/modules/ai-chat/components/ai-chat-sidebarpanel";
@@ -35,7 +25,7 @@ import { AIChatSidePanel } from "@/modules/ai-chat/components/ai-chat-sidebarpan
 interface ToggleAIProps {
   isEnabled: boolean;
   onToggle: (value: boolean) => void;
-  
+
   suggestionLoading: boolean;
   loadingProgress?: number;
   activeFeature?: string;
@@ -98,7 +88,7 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
               {isEnabled ? "Active" : "Inactive"}
             </Badge>
           </DropdownMenuLabel>
-          
+
           {suggestionLoading && activeFeature && (
             <div className="px-3 pb-3">
               <div className="space-y-2">
@@ -113,9 +103,9 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
               </div>
             </div>
           )}
-          
+
           <DropdownMenuSeparator />
-          
+
           <DropdownMenuItem 
             onClick={() => onToggle(!isEnabled)}
             className="py-2.5 cursor-pointer"
@@ -149,9 +139,9 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
               </div>
             </div>
           </DropdownMenuItem>
-          
+
           <DropdownMenuSeparator />
-          
+
           <DropdownMenuItem 
             onClick={() => setIsChatOpen(true)}
             className="py-2.5 cursor-pointer"

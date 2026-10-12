@@ -1,47 +1,29 @@
-import { TemplateFile, TemplateFolder } from "./path-to-json";
-
-export function findFilePath(
-  file: TemplateFile,
-  folder: TemplateFolder,
-  pathSoFar: string[] = []
-): string | null {
-  for (const item of folder.items) {
-    if ("folderName" in item) {
-      const res = findFilePath(file, item, [...pathSoFar, item.folderName]);
-      if (res) return res;
-    } else {
-      if (
-        item.filename === file.filename &&
-        item.fileExtension === file.fileExtension
-      ) {
-        return [
-          ...pathSoFar,
-          item.filename + (item.fileExtension ? "." + item.fileExtension : ""),
-        ].join("/");
+import type { TemplateFile, TemplateFolder } from "./path-to-json";
+export function findFilePath(file: TemplateFile, folder: TemplateFolder, pathSoFar: string[] = []): string | null {
+  if ("id" in file && typeof file.id === "string") return file.id;
+  const matches: string[] = []; let identity: string | null = null;
+  function visit(current: TemplateFolder, parents: string[]) {
+    for (const item of current.items) {
+      if ("folderName" in item) visit(item, [...parents, item.folderName]);
+      else {
+        const path = [...parents, item.filename + (item.fileExtension ? "." + item.fileExtension : "")].join("/");
+        if (item === file) identity = path;
+        if (item.filename === file.filename && item.fileExtension === file.fileExtension && item.content === file.content) matches.push(path);
       }
     }
   }
-  return null;
+  visit(folder, pathSoFar);
+  return identity ?? (matches.length === 1 ? matches[0] : null);
 }
-
-
-
-/**
- * Generates a unique file ID based on file location in folder structure
- * @param file The template file
- * @param rootFolder The root template folder containing all files
- * @returns A unique file identifier including full path
- */
-export const generateFileId = (file: TemplateFile, rootFolder: TemplateFolder): string => {
-  // Find the file's path in the folder structure
-  const path = findFilePath(file, rootFolder)?.replace(/^\/+/, '') || '';
-  
-  // Handle empty/undefined file extension
-  const extension = file.fileExtension?.trim();
-  const extensionSuffix = extension ? `.${extension}` : '';
-
-  // Combine path and filename
-  return path
-    ? `${path}/${file.filename}${extensionSuffix}`
-    : `${file.filename}${extensionSuffix}`;
+export function generateFileId(file: TemplateFile, root: TemplateFolder): string {
+  const path = findFilePath(file, root);
+  if (!path) throw new Error("File path is missing or ambiguous");
+  return path;
+}
+export function updateFilesByPath(folder: TemplateFolder, updates: ReadonlyMap<string, string>, parent = ""): TemplateFolder {
+  return { ...folder, items: folder.items.map(item => {
+    if ("folderName" in item) return updateFilesByPath(item, updates, parent + item.folderName + "/");
+    const key = parent + item.filename + (item.fileExtension ? "." + item.fileExtension : "");
+    return updates.has(key) ? { ...item, content: updates.get(key)! } : item;
+  }) };
 }

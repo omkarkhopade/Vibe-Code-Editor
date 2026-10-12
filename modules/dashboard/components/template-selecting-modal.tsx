@@ -262,7 +262,7 @@ const TemplateSelectionModal = ({
                 <Tabs
                   defaultValue="all"
                   className="w-full sm:w-auto"
-                  onValueChange={(value) => setCategory(value as any)}
+                  onValueChange={(value) => setCategory(value as "all" | "frontend" | "backend" | "fullstack")}
                 >
                   <TabsList className="grid grid-cols-4 w-full sm:w-[400px]">
                     <TabsTrigger value="all">All</TabsTrigger>
@@ -288,7 +288,7 @@ const TemplateSelectionModal = ({
                               ? "border-[#E93F3F]  shadow-[0_0_0_1px_#E93F3F,0_8px_20px_rgba(233,63,63,0.15)]"
                               : "hover:border-[#E93F3F] shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)]"
                           }
-                          
+
                           `}
                         onClick={() => handleSelectTemplate(template.id)}
                       >

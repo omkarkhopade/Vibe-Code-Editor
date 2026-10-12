@@ -1,70 +1,27 @@
-import {
-  readTemplateStructureFromJson,
-  saveTemplateStructureToJson,
-} from "@/modules/playground/lib/path-to-json";
+import { scanTemplateDirectory } from "@/modules/playground/lib/path-to-json";
+import { isPlaygroundId, isTemplateFolder } from "@/modules/playground/lib/validation";
 import { db } from "@/lib/db";
 import { templatePaths } from "@/lib/template";
-import path from "path";
-import fs from "fs/promises";
-import { NextRequest } from "next/server";
-
-function validateJsonStructure(data: unknown): boolean {
+import { ApiError, errorResponse } from "@/lib/api-error";
+import { currentUser } from "@/modules/auth/actions";
+import path from "node:path";
+import fs from "node:fs/promises";
+export const runtime = "nodejs";
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    JSON.parse(JSON.stringify(data)); // Ensures it's serializable
-    return true;
-  } catch (error) {
-    console.error("Invalid JSON structure:", error);
-    return false;
-  }
-}
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-
-const {id} = await params;
-
-if(!id){
-      return Response.json({ error: "Missing playground ID" }, { status: 400 });
-}
-
-const playground = await db.playground.findUnique({
-    where:{id}
-})
-
-  if (!playground) {
-    return Response.json({ error: "Playground not found" }, { status: 404 });
-  }
-  
-  const templateKey = playground.template as keyof typeof templatePaths;
-  const templatePath = templatePaths[templateKey]
-
-    if (!templatePath) {
-    return Response.json({ error: "Invalid template" }, { status: 404 });
-  }
-
-  try {
-    const inputPath = path.join(process.cwd() , templatePath);
-    const outputFile = path.join(process.cwd() , `output/${templateKey}.json`);
-
-    await saveTemplateStructureToJson(inputPath , outputFile);
-    const result = await readTemplateStructureFromJson(outputFile);
-
-
-    // Validate the JSON structure before saving
-    if (!validateJsonStructure(result.items)) {
-      return Response.json({ error: "Invalid JSON structure" }, { status: 500 });
-    }
-
-    await fs.unlink(outputFile)
-
-
-      return Response.json({ success: true, templateJson: result }, { status: 200 });
-  } catch (error) {
-      console.error("Error generating template JSON:", error);
-    return Response.json({ error: "Failed to generate template" }, { status: 500 });
-  }
-
-
+    const { id } = await params;
+    if (!isPlaygroundId(id)) throw new ApiError(400, "Invalid playground ID");
+    const user = await currentUser();
+    if (!user?.id) throw new ApiError(401, "Sign in to load this playground");
+    const playground = await db.playground.findUnique({ where: { id, userId: user.id }, select: { template: true } });
+    if (!playground) throw new ApiError(404, "Playground not found");
+    if (!Object.hasOwn(templatePaths, playground.template)) throw new ApiError(422, "Invalid template");
+    const root = await fs.realpath(path.join(process.cwd(), "vibecode-starters"));
+    const input = await fs.realpath(path.join(process.cwd(), "vibecode-starters", templatePaths[playground.template]));
+    const relative = path.relative(root, input);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) throw new ApiError(422, "Invalid template path");
+    const result = await scanTemplateDirectory(input);
+    if (!isTemplateFolder(result)) throw new ApiError(422, "Invalid template structure");
+    return Response.json({ success: true, templateJson: result }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) { return errorResponse(error); }
 }
