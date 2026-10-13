@@ -40,10 +40,10 @@ test('AI request parsing rejects cross-origin, oversized, malformed and anonymou
 
 test('NDJSON parsing handles split UTF-8, multiple records and missing final newline', async () => {
   const { readNDJSON } = load('modules/ai/lib/ndjson.ts');
-  const encoded = new TextEncoder().encode('{"token":"?"}\n{"done":true}');
+  const encoded = new TextEncoder().encode('{"token":"\u03bb"}\n{"done":true}');
   const received = [];
   await readNDJSON(new ReadableStream({ start(controller) { for (const byte of encoded) controller.enqueue(new Uint8Array([byte])); controller.close(); } }), value => received.push(value));
-  assert.deepEqual(received, [{ token: '?' }, { done: true }]);
+  assert.deepEqual(received, [{ token: '\u03bb' }, { done: true }]);
   await assert.rejects(readNDJSON(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('invalid')); controller.close(); } }), () => {}));
 });
 test('streaming forwards only response tokens and checks completion', async t => {
@@ -54,4 +54,37 @@ test('streaming forwards only response tokens and checks completion', async t =>
   assert.deepEqual(tokens, ['OK']);
   mock.mock.mockImplementation(async url => url.endsWith('/api/tags') ? Response.json({ models: [{ name: 'gpt-oss:20b' }] }) : new Response('{"response":"unfinished"}\n'));
   await assert.rejects(generateText('test', new AbortController().signal, undefined, () => {}), error => error.status === 502);
+});
+
+test('model discovery is deduplicated and selected installed models reach inference', async t => {
+  let sent;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url.endsWith('/api/tags')) return Response.json({ models: [{ name: 'gpt-oss:20b' }, { name: 'coder:latest' }, { name: 'coder:latest' }] });
+    sent = JSON.parse(options.body); return Response.json({ response: 'code' });
+  });
+  const provider = load('modules/ai/lib/ollama.ts');
+  assert.deepEqual((await provider.listModels(new AbortController().signal)).models, ['coder:latest', 'gpt-oss:20b']);
+  await provider.generateText('test', new AbortController().signal, undefined, undefined, 'coder:latest');
+  assert.equal(sent.model, 'coder:latest'); assert.equal(sent.think, undefined);
+  await assert.rejects(provider.generateText('test', new AbortController().signal, undefined, undefined, 'uninstalled:model'), error => error.status === 400);
+});
+test('completion sends a separate system prompt and preserves insertion whitespace', async t => {
+  let sent;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url.endsWith('/api/tags')) return Response.json({ models: [{ name: 'gpt-oss:20b' }] });
+    sent = JSON.parse(options.body); return Response.json({ response: '\n  return value;\n' });
+  });
+  const { generateText } = load('modules/ai/lib/ollama.ts');
+  const { COMPLETION_SYSTEM_PROMPT } = load('modules/ai/lib/prompts.ts');
+  const result = await generateText('prefix/suffix', new AbortController().signal, COMPLETION_SYSTEM_PROMPT, undefined, undefined, true);
+  assert.equal(result, '\n  return value;\n');
+  assert.equal(sent.system, COMPLETION_SYSTEM_PROMPT); assert.match(sent.system, /untrusted/); assert.match(sent.system, /do not repeat/);
+});
+test('model catalog endpoint requires authentication and reveals no internal endpoint', async () => {
+  const mocks = { '@/modules/auth/actions': { currentUser: async () => ({ id: 'owner' }) }, '@/modules/ai/lib/ollama': { listModels: async () => ({ defaultModel: 'gpt-oss:20b', models: ['gpt-oss:20b'] }) } };
+  const { GET } = load('app/api/ai/models/route.ts', mocks);
+  const response = await GET(new Request('http://localhost/api/ai/models'));
+  assert.equal(response.status, 200); assert.deepEqual(await response.json(), { defaultModel: 'gpt-oss:20b', models: ['gpt-oss:20b'] });
+  const anonymous = load('app/api/ai/models/route.ts', { ...mocks, '@/modules/auth/actions': { currentUser: async () => null } });
+  assert.equal((await anonymous.GET(new Request('http://localhost/api/ai/models'))).status, 401);
 });

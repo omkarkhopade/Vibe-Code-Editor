@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from 'lucide-react'
 import Image from "next/image"
 import { useRouter } from "next/navigation";
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner";
 import TemplateSelectingModal from "./template-selecting-modal";
 import { createPlayground } from "../actions";
@@ -14,7 +14,9 @@ import { createPlayground } from "../actions";
 const AddNewButton = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const router = useRouter()
+  const router = useRouter();
+  const pending = useRef(false);
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("create") === "1") { const timer = setTimeout(() => setIsModalOpen(true), 0); return () => clearTimeout(timer); } }, []);
 
 
   const handleSubmit = async (data:{
@@ -24,6 +26,8 @@ const AddNewButton = () => {
   })=>{
 
 
+    if (pending.current) return;
+    pending.current = true;
     try {
     const res = await createPlayground(data);
     toast.success("Playground Created successfully"
@@ -31,15 +35,17 @@ const AddNewButton = () => {
     )
     setIsModalOpen(false)
     router.push(`/playground/${res.id}`)
-    } catch { toast.error("Failed to create playground. Please try again."); }
+    } catch (error) { toast.error("Failed to create playground. Please try again."); throw error; } finally { pending.current = false; }
   }
 
 
   return (
     <>
       <div
+        role="button" tabIndex={0} aria-haspopup="dialog" aria-label="Create a playground"
+        onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setIsModalOpen(true); } }}
         onClick={() => setIsModalOpen(true)}
-        className="group px-6 py-6 flex flex-row justify-between items-center border rounded-lg bg-muted cursor-pointer 
+        className="group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E93F3F]/60 px-6 py-6 flex flex-row justify-between items-center border rounded-lg bg-muted cursor-pointer
         transition-all duration-300 ease-in-out
         hover:bg-background hover:border-[#E93F3F] hover:scale-[1.02]
         shadow-[0_2px_10px_rgba(0,0,0,0.08)]
@@ -47,6 +53,7 @@ const AddNewButton = () => {
       >
         <div className="flex flex-row justify-center items-start gap-4">
           <Button
+            aria-label="Create a playground"
             variant={"outline"}
             className="flex justify-center items-center bg-white group-hover:bg-[#fff8f8] group-hover:border-[#E93F3F] group-hover:text-[#E93F3F] transition-colors duration-300"
             size={"icon"}

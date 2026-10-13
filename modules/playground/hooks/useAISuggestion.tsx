@@ -19,7 +19,7 @@ export const useAISuggestions = () => {
       const data = await response.json();
       const current = editor.getPosition();
       if (!controller.signal.aborted && editor.getModel() === model && model.getVersionId() === version && current?.equals(cursor) && typeof data.suggestion === "string") {
-        setState(prev => ({ ...prev, suggestion: data.suggestion.trim(), position: { line: cursor.lineNumber, column: cursor.column } }));
+        setState(prev => ({ ...prev, suggestion: data.suggestion, position: { line: cursor.lineNumber, column: cursor.column } }));
       }
     } catch { /* Keep editor content unchanged on network failure or cancellation. */ }
     finally { if (pending.current === controller) pending.current = null; if (!controller.signal.aborted) setState(prev => ({ ...prev, isLoading: false })); }
@@ -32,7 +32,7 @@ export const useAISuggestions = () => {
   const acceptSuggestion = useCallback((editor: Editor, monaco: typeof Monaco) => {
     if (!state.suggestion || !state.position) return;
     const { line, column } = state.position;
-    editor.executeEdits("ai-suggestion", [{ range: new monaco.Range(line, column, line, column), text: state.suggestion.replace(/^\d+:\s*/gm, ""), forceMoveMarkers: true }]);
+    editor.executeEdits("ai-suggestion", [{ range: new monaco.Range(line, column, line, column), text: state.suggestion, forceMoveMarkers: true }]);
     clearSuggestion(editor);
   }, [state.suggestion, state.position, clearSuggestion]);
   return { ...state, toggleEnabled, fetchSuggestion, acceptSuggestion, clearSuggestion, rejectSuggestion: clearSuggestion };

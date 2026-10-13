@@ -177,17 +177,18 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
       // Use the passed saveTemplateData function
 
       // Sync with web container
-      if (writeFileSync) {
+      if (instance && writeFileSync) {
         const filePath = parentPath
           ? `${parentPath}/${newFile.filename}${newFile.fileExtension ? "." + newFile.fileExtension : ""}`
           : `${newFile.filename}${newFile.fileExtension ? "." + newFile.fileExtension : ""}`;
-        await writeFileSync(filePath, newFile.content || "");
+        try { await writeFileSync(filePath, newFile.content || ""); } catch { toast.error("File saved, but preview sync failed. Restart the preview."); }
       }
 
       get().openFile(newFile);
     } catch (error) {
       console.error("Error adding file:", error);
       toast.error("Failed to create file");
+      throw error;
     }
   },
 
@@ -222,11 +223,12 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
         const folderPath = parentPath
           ? `${parentPath}/${newFolder.folderName}`
           : newFolder.folderName;
-        await instance.fs.mkdir(folderPath, { recursive: true });
+        try { await instance.fs.mkdir(folderPath, { recursive: true }); } catch { toast.error("Folder saved, but preview sync failed. Restart the preview."); }
       }
     } catch (error) {
       console.error("Error adding folder:", error);
       toast.error("Failed to create folder");
+      throw error;
     }
   },
 
@@ -276,6 +278,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
     } catch (error) {
       console.error("Error deleting file:", error);
       toast.error("Failed to delete file");
+      throw error;
     }
   },
 
@@ -329,6 +332,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
     } catch (error) {
       console.error("Error deleting folder:", error);
       toast.error("Failed to delete folder");
+      throw error;
     }
   },
 
@@ -339,7 +343,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
     parentPath,
     saveTemplateData
   ) => {
-    const { templateData, openFiles, activeFileId } = get();
+    const { templateData } = get();
     if (!templateData) return;
 
     // Generate old and new file IDs using the same logic as openFile
@@ -380,6 +384,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
         await saveTemplateData(updatedTemplateData);
 
         // Update open files with new ID and names
+        const { openFiles, activeFileId } = get();
         const updatedOpenFiles = openFiles.map((f) =>
           f.id === oldFileId
             ? {
@@ -403,6 +408,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
     } catch (error) {
       console.error("Error renaming file:", error);
       toast.error("Failed to rename file");
+      throw error;
     }
   },
 
@@ -452,6 +458,7 @@ export const useFileExplorer = create<FileExplorerState>((set, get) => ({
     } catch (error) {
       console.error("Error renaming folder:", error);
       toast.error("Failed to rename folder");
+      throw error;
     }
   },
 

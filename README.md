@@ -42,11 +42,11 @@ No database migration was applied. Before provisioning a new database, review sc
 | OLLAMA_MODEL | Defaults to gpt-oss:20b; unavailable models produce a controlled error |
 | OLLAMA_TIMEOUT_MS | Default 180000; allowed range 1000–600000 |
 
-These variables must not use a NEXT_PUBLIC prefix. Production requires OLLAMA_BASE_URL explicitly. Existing chat model selector values do not override the administrator's configured model.
+These variables must not use a NEXT_PUBLIC prefix. Production requires OLLAMA_BASE_URL explicitly. Chat discovers installed Ollama models and submits the selected model. OLLAMA_MODEL remains the default and the completion model. Optional OLLAMA_ALLOWED_MODELS is a comma-separated allowlist; include the default model. Cloud providers are not supported.
 
 ## AI behavior
 
-Chat returns JSON with streaming off and incremental NDJSON with streaming on. Only response tokens are forwarded; reasoning fields are not exposed. Completion remains JSON. Requests use a 4096-token context and at most 1024 generated tokens. There is no automatic model switch or generation retry. Cancellation propagates upstream.
+Chat returns JSON with streaming off and incremental NDJSON with streaming on. Only response tokens are forwarded; reasoning fields are not exposed. Completion remains JSON and uses a dedicated cursor-insertion system prompt that preserves whitespace and avoids duplicating surrounding source. Requests use a 4096-token context and at most 1024 generated tokens. There is no automatic model switch or generation retry. Cancellation propagates upstream.
 
 Each process admits one generation and each user up to ten AI requests per minute. Multiple workers require shared admission/rate controls before scaling. Prompts are size-limited; long chats require shortening. In-stream failures are error records after HTTP headers have been sent.
 
@@ -86,3 +86,9 @@ See [deployment notes](docs/deployment.md). A successful build is not a verified
 - Prisma EPERM on Windows: stop this project's dev/production server before regenerating its native client.
 - Font build failure: permit build-time Google Fonts access. Existing Geist fonts were not replaced.
 - Preview failure: inspect terminal output. Browser WebContainer support and network access for starter npm installs are required. Starter packages need independent security/compatibility review.
+
+## GitHub import
+
+Open Github Repository on the dashboard imports a Node.js source snapshot from an HTTPS GitHub repository URL, with an optional branch/ref. The project must have a root package.json with a dev or start script. Imports resolve to a fixed commit and create an owned playground; they do not sync or push changes.
+
+Public repositories are supported. Private repositories require a linked GitHub OAuth account whose existing token has repository access; the application does not request additional scopes automatically. Tokens remain server-side. Imports permit 200 text files, 4 MB total, and 1 MB per file. Environment/key files, known binary assets, symlinks, submodules and generated directories are excluded. These filename filters are not a comprehensive secret scanner. Incomplete or oversized trees are rejected. Dependencies and scripts execute only in the browser WebContainer when the playground runs. Native dependencies or required omitted assets may need manual adaptation.

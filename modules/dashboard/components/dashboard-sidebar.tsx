@@ -98,8 +98,8 @@ export function DashboardSidebar({ initialPlaygroundData }: { initialPlaygroundD
             <Star className="h-4 w-4 mr-2" />
             Starred
           </SidebarGroupLabel>
-          <SidebarGroupAction title="Add starred playground">
-            <Plus className="h-4 w-4" />
+          <SidebarGroupAction asChild title="Manage favorites"><Link href="/dashboard">
+            <Plus className="h-4 w-4" /></Link>
           </SidebarGroupAction>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -134,8 +134,8 @@ export function DashboardSidebar({ initialPlaygroundData }: { initialPlaygroundD
             <History className="h-4 w-4 mr-2" />
             Recent
           </SidebarGroupLabel>
-          <SidebarGroupAction title="Create new playground">
-            <FolderPlus className="h-4 w-4" />
+          <SidebarGroupAction asChild title="Create new playground"><Link href="/dashboard?create=1">
+            <FolderPlus className="h-4 w-4" /></Link>
           </SidebarGroupAction>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -146,7 +146,7 @@ export function DashboardSidebar({ initialPlaygroundData }: { initialPlaygroundD
                     <SidebarMenuItem key={playground.id}>
                       <SidebarMenuButton
                         asChild
-                        isActive={pathname === `playground/${playground.id}`}
+                        isActive={pathname === `/playground/${playground.id}`}
                         tooltip={playground.name}
                       >
                         <Link href={`/playground/${playground.id}`}>
@@ -160,7 +160,7 @@ export function DashboardSidebar({ initialPlaygroundData }: { initialPlaygroundD
               )}
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="View all">
-                  <Link href="/playgrounds">
+                  <Link href="/dashboard">
                     <span className="text-sm text-muted-foreground">View all playgrounds</span>
                   </Link>
                 </SidebarMenuButton>

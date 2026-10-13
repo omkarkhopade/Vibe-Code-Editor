@@ -1,14 +1,18 @@
 "use client";
+import { usePreferences } from "@/modules/settings/lib/use-preferences";
 import type * as MonacoTypes from "monaco-editor";
 
 
 import { useRef, useEffect, useCallback } from "react"
-import Editor, { type Monaco } from "@monaco-editor/react"
+import Editor, { loader, type Monaco } from "@monaco-editor/react"
 import { TemplateFile } from "../lib/path-to-json"
 import { configureMonaco, defaultEditorOptions, getEditorLanguage } from "../lib/editor-config"
 
 
+loader.config({ paths: { vs: "/monaco/vs" } });
+
 interface PlaygroundEditorProps {
+  filePath: string | undefined
   activeFile: TemplateFile | undefined
   content: string
   onContentChange: (value: string) => void
@@ -22,6 +26,7 @@ interface PlaygroundEditorProps {
 
 export const PlaygroundEditor = ({
   activeFile,
+  filePath,
   content,
   onContentChange,
   suggestion,
@@ -30,6 +35,7 @@ export const PlaygroundEditor = ({
   onRejectSuggestion,
   onTriggerSuggestion,
 }: PlaygroundEditorProps) => {
+  const { preferences } = usePreferences();
   const editorRef = useRef<MonacoTypes.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const inlineCompletionProviderRef = useRef<MonacoTypes.IDisposable | null>(null)
@@ -112,7 +118,7 @@ export const PlaygroundEditor = ({
             ],
           }
         },
-        freeInlineCompletions: () => {
+        disposeInlineCompletions: () => {
 
         },
       }
@@ -295,7 +301,7 @@ export const PlaygroundEditor = ({
 
 
     editor.updateOptions({
-      ...defaultEditorOptions,
+      ...defaultEditorOptions, fontSize: preferences.fontSize, tabSize: preferences.tabSize, wordWrap: preferences.wordWrap, detectIndentation: false,
       // Enable inline suggestions but with specific settings to prevent conflicts
       inlineSuggest: {
         enabled: true,
@@ -515,12 +521,13 @@ export const PlaygroundEditor = ({
       )}
 
       <Editor
+        path={filePath}
         height="100%"
         value={content}
         onChange={(value) => onContentChange(value || "")}
         onMount={handleEditorDidMount}
         language={activeFile ? getEditorLanguage(activeFile.fileExtension || "") : "plaintext"}
-        options={defaultEditorOptions}
+        options={{ ...defaultEditorOptions, fontSize: preferences.fontSize, tabSize: preferences.tabSize, wordWrap: preferences.wordWrap }}
       />
     </div>
   )

@@ -126,3 +126,20 @@ Browser/OAuth/editor E2E and visual regression acceptance remain open. Cross-tab
 3. Start the existing Ollama service; verify ollama list and set OLLAMA_BASE_URL/OLLAMA_MODEL/OLLAMA_TIMEOUT_MS for the server environment.
 4. Perform the staging browser/OAuth, save/reopen, all-template-preview and desktop/mobile screenshot checks listed in deployment.md.
 5. Provision private inference, MongoDB access/backups, monitoring and shared limits if scaling. Obtain explicit approval before migrations or production deployment.
+
+## Additional assignments verified - 2026-10-13
+
+Implemented on feature/production-readiness: a cursor-only completion system prompt with structured source context and preserved insertion whitespace; installed-Ollama discovery and server-validated chat model selection; optional OLLAMA_ALLOWED_MODELS; GitHub Node.js snapshot import with an existing-theme dialog; keyboard, focus and responsive control polish. The user explicitly authorized this modest UI polish and confirmed Ollama-only models. No cloud provider integration or model downloads.
+
+GitHub imports use server-side GitHub API reads pinned to a commit. The endpoint authenticates ownership, restricts origins and payload sizes, bounds downloads, filters environment/key filenames and unsafe links, and atomically creates a playground with its source. Limits: root package.json with a dev/start script, 200 text files, 4 MB aggregate, 1 MB/file. Private access depends on existing linked OAuth permissions. This is import, not bidirectional Git synchronization. Filename exclusions are not comprehensive secret detection. Native dependencies, omitted binary assets and non-root workspaces may require adaptation. Imported scripts execute in the browser runtime only. Rate controls are process-local.
+
+Validation completed:
+- npm.cmd test: 28/28 PASS, including model selection, whitespace, GitHub import restrictions and mocked owned persistence.
+- npm.cmd run typecheck: PASS.
+- npm.cmd run lint -- --max-warnings=0: PASS.
+- npm.cmd run build: PASS with network access for existing Google Fonts; restricted-network attempt could not fetch fonts.
+- Production server smoke: 10/10 expected statuses with process-only AUTH_URL=http://localhost:3001 (health, readiness, sign-in, session, dashboard, template, chat, completion, models and GitHub import). Test server stopped afterward.
+- Live installed-model discovery: PASS; only gpt-oss:20b is currently installed. Alternate model routing is covered by mocks.
+- Live public GitHub read-only import: PASS for heroku/node-js-sample, 7 files, EXPRESS, valid source tree. No repository code was executed or persisted in this check.
+
+Not verified: real private GitHub access, authenticated database creation through the new import UI, OAuth/editor/preview browser E2E and visual screenshots. Browser initialization still fails with missing sandboxPolicy. Previous dependency audit findings (5 high development-chain and 4 low math-renderer entries) remain unresolved; dependencies were not changed in this continuation. The earlier approximately 160-second inference remains a performance concern. These limits prevent claiming complete production readiness. No commits, pushes, deployment, migrations or real database writes were performed in this continuation.

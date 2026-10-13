@@ -6,6 +6,7 @@
 
 export const publicRoutes: string[] = [
     "/api/health",
+    "/docs",
 
 ]
 

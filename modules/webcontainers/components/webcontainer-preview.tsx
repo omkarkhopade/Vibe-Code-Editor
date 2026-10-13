@@ -2,8 +2,10 @@
 
 import React, { useEffect, useState, useRef } from "react";
 
+import { syncSource } from "../hooks/sync-source";
 import { transformToWebContainerFormat } from "../hooks/transformer";
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
 import { WebContainer, type WebContainerProcess } from "@webcontainer/api";
@@ -28,18 +30,33 @@ const WebContainerPreview = ({
   isLoading,
   forceResetup = false,
 }: WebContainerPreviewProps) => {
+  const [restart, setRestart] = useState(0);
+  const [previewRevision, setPreviewRevision] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [currentStep, setCurrentStep] = useState(0);
   const totalSteps = 4;
   const [setupError, setSetupError] = useState<string | null>(null);
   const terminalRef = useRef<TerminalRef | null>(null);
   const initialTemplate = useRef(templateData);
+  const mountedSource = useRef<TemplateFolder | null>(null);
+  const syncQueue = useRef(Promise.resolve());
   useEffect(() => {
     if (!instance) return;
     let disposed = false;
+    syncQueue.current = syncQueue.current.catch(() => {}).then(async () => {
+      if (disposed) return;
+      await syncSource(instance, mountedSource.current, templateData);
+      mountedSource.current = templateData;
+    }).catch(() => { if (!disposed) setSetupError("Source was saved, but the preview could not synchronize. Restart the preview."); });
+    return () => { disposed = true; };
+  }, [instance, templateData]);
+  useEffect(() => {
+    if (!instance) return;
+    let disposed = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     const processes: WebContainerProcess[] = [];
     const off = instance.on("server-ready", (_port, url) => {
-      if (!disposed) { setPreviewUrl(url); setCurrentStep(4); }
+      if (!disposed) { timers.forEach(clearTimeout); setSetupError(null); setPreviewUrl(url); setCurrentStep(4); }
     });
     const write = (data: string) => { if (!disposed) terminalRef.current?.writeToTerminal(data); };
     async function run(command: string[]) {
@@ -58,7 +75,7 @@ const WebContainerPreview = ({
         write("Installing dependencies...\r\n");
         const install = await run(["install"]);
         if (!install) return;
-        const exit = await install.exit;
+        const exit = await Promise.race([install.exit, new Promise<never>((_, reject) => { timers.push(setTimeout(() => { install.kill(); reject(new Error("Dependency installation timed out. Check registry access and retry.")); }, 180000)); })]);
         if (disposed) return;
         if (exit !== 0) throw new Error("Dependency installation failed");
         setCurrentStep(3);
@@ -66,16 +83,18 @@ const WebContainerPreview = ({
         const script = manifest.scripts?.dev ? "dev" : "start";
         const server = await run(["run", script]);
         if (server) {
+          timers.push(setTimeout(() => { if (!disposed) setSetupError("Server has not exposed a preview port. Check its start script and terminal output, then retry."); }, 90000));
           const code = await server.exit;
-          if (!disposed && code !== 0) setSetupError("Development server exited unexpectedly");
+          timers.forEach(clearTimeout);
+          if (!disposed) { setPreviewUrl(""); setSetupError(`Development server stopped (exit ${code}). Check its script and restart.`); }
         }
       } catch (failure) {
         if (!disposed) setSetupError(failure instanceof Error ? failure.message : "Preview setup failed");
       }
     }
     void setup();
-    return () => { disposed = true; off(); processes.forEach(process => process.kill()); };
-  }, [instance, forceResetup]);
+    return () => { disposed = true; timers.forEach(clearTimeout); off(); processes.forEach(process => process.kill()); };
+  }, [instance, forceResetup, restart]);
 
   if (isLoading) {
     return (
@@ -99,7 +118,7 @@ const WebContainerPreview = ({
             <XCircle className="h-5 w-5" />
             <h3 className="font-semibold">Error</h3>
           </div>
-          <p className="text-sm">{error || setupError}</p>
+          <p className="text-sm">{error || setupError}</p><Button className="mt-4" variant="outline" onClick={() => { if (error) window.location.reload(); else { initialTemplate.current = templateData; setRestart(value => value + 1); } }}>Retry preview</Button>
         </div>
       </div>
     );
@@ -135,6 +154,7 @@ const WebContainerPreview = ({
 
   return (
     <div className="h-full w-full flex flex-col">
+      <div className="flex gap-2 border-b p-2"><Button size="sm" variant="outline" onClick={() => { initialTemplate.current = templateData; setRestart(value => value + 1); }}>Restart server</Button><Button size="sm" variant="ghost" disabled={!previewUrl} onClick={() => setPreviewRevision(value => value + 1)}>Reload preview</Button></div>
       {!previewUrl ? (
         <div className="h-full flex flex-col">
           <div className="w-full max-w-md p-6 m-5 rounded-lg bg-white dark:bg-zinc-800 shadow-sm mx-auto">
@@ -177,6 +197,7 @@ const WebContainerPreview = ({
         <div className="h-full flex flex-col">
           <div className="flex-1">
             <iframe
+              key={previewRevision}
               src={previewUrl}
               className="w-full h-full border-none"
               title="WebContainer Preview"

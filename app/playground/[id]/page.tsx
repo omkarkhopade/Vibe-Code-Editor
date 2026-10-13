@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -55,8 +56,8 @@ const MainPlaygroundPage = () => {
     setPlaygroundId,
     setOpenFiles,
     activeFileId,
-    closeAllFiles,
-    closeFile,
+    closeAllFiles: discardAllFiles,
+    closeFile: discardFile,
     openFile,
     openFiles,
 
@@ -156,6 +157,12 @@ const MainPlaygroundPage = () => {
 
   const activeFile = openFiles.find((file) => file.id === activeFileId);
   const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges);
+  const closeFile = (fileId: string) => { const file = useFileExplorer.getState().openFiles.find(file => file.id === fileId); if (!file?.hasUnsavedChanges || window.confirm("Discard unsaved changes in " + file.id + "?")) discardFile(fileId); };
+  const closeAllFiles = () => { if (!hasUnsavedChanges || window.confirm("Discard all unsaved changes?")) discardAllFiles(); };
+  useEffect(() => {
+    const guard = (event: BeforeUnloadEvent) => { if (useFileExplorer.getState().openFiles.some(file => file.hasUnsavedChanges)) { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", guard); return () => window.removeEventListener("beforeunload", guard);
+  }, []);
 
   const handleFileSelect = (file: TemplateFile) => {
     openFile(file);
@@ -192,9 +199,9 @@ const MainPlaygroundPage = () => {
 
   useEffect(()=>{
     const handleKeyDown = (e:KeyboardEvent)=>{
-      if(e.ctrlKey && e.key === "s"){
+      if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s"){
         e.preventDefault()
-        void handleSave().catch(() => {});
+        void handleSave(e.shiftKey ? "*" : undefined).catch(() => {});
       }
     }
      window.addEventListener("keydown", handleKeyDown);
@@ -290,11 +297,11 @@ const MainPlaygroundPage = () => {
 
               <div className="flex items-center gap-1">
                 <Tooltip>
-                  <TooltipTrigger>
+                  <TooltipTrigger asChild>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleSave()}
+                      aria-label="Save file" onClick={() => handleSave()}
                       disabled={!activeFile || !activeFile.hasUnsavedChanges}
                     >
                       <Save className="h-4 w-4" />
@@ -308,7 +315,7 @@ const MainPlaygroundPage = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={handleSaveAll}
+                      aria-label="Save all files" onClick={handleSaveAll}
                       disabled={!hasUnsavedChanges}
                     >
                       <Save className="h-4 w-4" /> All
@@ -317,7 +324,7 @@ const MainPlaygroundPage = () => {
                   <TooltipContent>Save All (Ctrl+Shift+S)</TooltipContent>
                 </Tooltip>
 
-               <ToggleAI
+               <ToggleAI activeSource={activeFile ? { path: activeFile.id, content: activeFile.content } : undefined}
                 isEnabled={aiSuggestions.isEnabled}
                 onToggle={aiSuggestions.toggleEnabled}
                 suggestionLoading={aiSuggestions.isLoading}
@@ -325,11 +332,13 @@ const MainPlaygroundPage = () => {
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="outline">
+                    <Button size="sm" variant="outline" aria-label="Editor actions">
                       <Settings className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild><Link href="/dashboard" onClick={event => { if (hasUnsavedChanges && !window.confirm("Discard unsaved changes and return to dashboard?")) event.preventDefault(); }}>Back to dashboard</Link></DropdownMenuItem>
+                    <DropdownMenuItem asChild><Link href="/settings" onClick={event => { if (hasUnsavedChanges && !window.confirm("Discard unsaved changes and open Settings?")) event.preventDefault(); }}>Settings</Link></DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => setIsPreviewVisible(!isPreviewVisible)}
                     >
@@ -364,12 +373,13 @@ const MainPlaygroundPage = () => {
                             <div className="flex items-center gap-2">
                               <FileText className="h-3 w-3" />
                               <span>
-                                {file.filename}.{file.fileExtension}
+                                {file.filename}{file.fileExtension ? "." + file.fileExtension : ""}
                               </span>
                               {file.hasUnsavedChanges && (
                                 <span className="h-2 w-2 rounded-full bg-orange-500" />
                               )}
                               <span
+                                role="button" tabIndex={0} aria-label={"Close " + file.id} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); closeFile(file.id); } }}
                                 className="ml-2 h-4 w-4 hover:bg-destructive hover:text-destructive-foreground rounded-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -402,7 +412,7 @@ const MainPlaygroundPage = () => {
                     className="h-full"
                   >
                     <ResizablePanel defaultSize={isPreviewVisible ? "50%" : "100%"}>
-                      <PlaygroundEditor
+                      <PlaygroundEditor filePath={activeFile ? `${id}/${activeFile.id}` : undefined}
                         activeFile={activeFile}
                         content={activeFile?.content || ""}
                         onContentChange={(value) => 

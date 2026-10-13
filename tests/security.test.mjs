@@ -23,16 +23,17 @@ test('all playground actions reject unauthenticated callers before querying priv
   for (const [name, args] of [['getAllPlaygroundForUser', []], ['deleteProjectById', [id]], ['editProjectById', [id, {}]], ['duplicateProjectById', [id]], ['toggleStarMarked', [id, true]], ['createPlayground', [{}]]]) await assert.rejects(actions[name](...args), /Authentication required/);
   const playground = load('modules/playground/actions/index.ts', mocks);
   await assert.rejects(playground.getPlaygroundById(id), /Authentication required/);
-  await assert.rejects(playground.SaveUpdatedCode(id, valid), /Authentication required/);
+  await assert.rejects(playground.SaveUpdatedCode(id, valid, null), /Authentication required/);
 });
 test('foreign playground save is denied, failed saves reject', async () => {
   const base = { '@/modules/auth/actions': { currentUser: async () => ({ id: 'owner' }) } };
   let writes = 0;
-  const db = { playground: { findUnique: async args => { assert.equal(args.where.userId, 'owner'); return null; } }, templateFile: { upsert: async () => { writes++; throw new Error('write failed'); } } };
+  const db = { playground: { findUnique: async args => { assert.equal(args.where.userId, 'owner'); return null; } }, templateFile: { findUnique: async () => null } };
   const actions = load('modules/playground/actions/index.ts', { ...base, '@/lib/db': { db } });
-  await assert.rejects(actions.SaveUpdatedCode(id, valid), /not found/); assert.equal(writes, 0);
+  await assert.rejects(actions.SaveUpdatedCode(id, valid, null), /not found/); assert.equal(writes, 0);
   db.playground.findUnique = async () => ({ id });
-  await assert.rejects(actions.SaveUpdatedCode(id, valid), /write failed/); assert.equal(writes, 1);
+  db.playground.update = async () => { writes++; throw new Error('write failed'); };
+  await assert.rejects(actions.SaveUpdatedCode(id, valid, null), /write failed/); assert.equal(writes, 1);
 });
 test('project duplication retains saved source and uses the authenticated owner', async () => {
   let created;
@@ -59,10 +60,10 @@ test('file explorer preserves tabs and source after rejected delete and rename',
   useFileExplorer.getState().setTemplateData(tree);
   useFileExplorer.getState().openFile(tree.items[0]);
   const reject = async () => { throw new Error('rejected'); };
-  await useFileExplorer.getState().handleDeleteFile(tree.items[0], '', reject);
+  await assert.rejects(useFileExplorer.getState().handleDeleteFile(tree.items[0], '', reject));
   assert.equal(useFileExplorer.getState().openFiles.length, 1);
   assert.deepEqual(useFileExplorer.getState().templateData, tree);
-  await useFileExplorer.getState().handleRenameFile(tree.items[0], 'OTHER', '', '', reject);
+  await assert.rejects(useFileExplorer.getState().handleRenameFile(tree.items[0], 'OTHER', '', '', reject));
   assert.equal(useFileExplorer.getState().openFiles[0].id, 'README');
   assert.deepEqual(useFileExplorer.getState().templateData, tree);
 });

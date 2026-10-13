@@ -23,6 +23,7 @@ import { AIChatSidePanel } from "@/modules/ai-chat/components/ai-chat-sidebarpan
 
 
 interface ToggleAIProps {
+  activeSource?: { path: string; content: string };
   isEnabled: boolean;
   onToggle: (value: boolean) => void;
 
@@ -32,6 +33,7 @@ interface ToggleAIProps {
 }
 
 const ToggleAI: React.FC<ToggleAIProps> = ({
+  activeSource,
   isEnabled,
   onToggle,
 
@@ -159,7 +161,7 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
         </DropdownMenuContent>
       </DropdownMenu>
 
-<AIChatSidePanel
+<AIChatSidePanel activeSource={activeSource}
 isOpen={isChatOpen}
 onClose={() => setIsChatOpen(false)}
 

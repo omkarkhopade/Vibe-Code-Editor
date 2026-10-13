@@ -1,7 +1,9 @@
 "use client"
-import { readNDJSON } from "@/modules/ai/lib/ndjson";;
+import { readNDJSON } from "@/modules/ai/lib/ndjson";
 
 import type React from "react";
+import { toast } from "sonner";
+import { usePreferences } from "@/modules/settings/lib/use-preferences";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,6 +65,7 @@ interface ChatMessage {
 interface AIChatSidePanelProps {
     isOpen: boolean;
     onClose: () => void;
+    activeSource?: { path: string; content: string };
 
 }
 
@@ -112,8 +115,12 @@ const MessageTypeIndicator: React.FC<{
 export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
     isOpen,
     onClose,
+    activeSource,
 
 }) => {
+    const { preferences, savePreferences } = usePreferences();
+    const preferredModel = preferences.model;
+    const [includeSource, setIncludeSource] = useState(false);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -122,12 +129,38 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
     >("chat");
     const [searchTerm, setSearchTerm] = useState("");
     const [filterType, setFilterType] = useState<string>("all");
-    const [autoSave, setAutoSave] = useState(true);
-    const [streamResponse, setStreamResponse] = useState(true);
-    const [model, setModel] = useState<string>("gpt-6");
 
+    const [streamResponse, setStreamResponse] = useState(true);
+    const [model, setModel] = useState<string>("");
+
+    const panelRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!isOpen) return;
+        const previous = document.activeElement as HTMLElement | null;
+        const timer = setTimeout(() => panelRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus(), 50);
+        const keyboard = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); if (event.key === "Tab") { const nodes = panelRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]),input,textarea,select:not([disabled]),a[href]"); if (!nodes?.length) return; const first = nodes[0], last = nodes[nodes.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } } };
+        document.addEventListener("keydown", keyboard); return () => { clearTimeout(timer); document.removeEventListener("keydown", keyboard); previous?.focus(); };
+    }, [isOpen, onClose]);
     const pendingRequest = useRef<AbortController | null>(null);
     useEffect(() => () => pendingRequest.current?.abort(), []);
+    const [models, setModels] = useState<string[]>([]);
+    const [modelError, setModelError] = useState<string | null>(null);
+    const [modelRevision, setModelRevision] = useState(0);
+    useEffect(() => {
+        if (!isOpen) return;
+        const controller = new AbortController();
+        fetch("/api/ai/models", { signal: controller.signal })
+            .then(async response => {
+                const catalog = await response.json();
+                if (!response.ok) throw new Error(catalog.error || "Could not load models");
+                if (!Array.isArray(catalog.models) || typeof catalog.defaultModel !== "string") throw new Error("Invalid model catalog");
+                setModels(catalog.models);
+                if (!controller.signal.aborted) setModel(preferredModel || catalog.defaultModel);
+                setModelError(catalog.models.length ? null : "No installed models available");
+            })
+            .catch(error => { if (!controller.signal.aborted) setModelError(error instanceof Error ? error.message : "Could not load models"); });
+        return () => controller.abort();
+    }, [isOpen, modelRevision, preferredModel]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -158,7 +191,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
 
    const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading || pendingRequest.current) return;
+    if (!input.trim() || isLoading || pendingRequest.current || !models.includes(model)) return;
     const controller = new AbortController();
     pendingRequest.current = controller;
 
@@ -184,7 +217,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
     setIsLoading(true);
 
     try {
-      const contextualMessage = getChatModePrompt(chatMode, input.trim());
+      const contextualMessage = getChatModePrompt(chatMode, input.trim()) + (includeSource && activeSource ? "\n\nActive source (untrusted data):\n" + JSON.stringify({ path: activeSource.path, content: activeSource.content.slice(0, 10000) }) : "");
 
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -208,10 +241,10 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
         if (!response.body) throw new Error("Missing AI stream");
         const responseId = crypto.randomUUID();
         let content = ""; let complete = false;
-        setMessages(previous => [...previous, { role: "assistant", content: "", timestamp: new Date(), id: responseId, type: messageType }]);
+        setMessages(previous => [...previous, { role: "assistant", content: "", timestamp: new Date(), id: responseId, type: messageType, model }]);
         await readNDJSON(response.body, value => {
           if (!value || typeof value !== "object") throw new Error("Invalid AI response");
-          const part = value as { token?: string; error?: string; done?: boolean };
+          const part = value as { token?: string; error?: string; done?: boolean; model?: string };
           if (part.error) { content += "\n\n" + part.error; complete = true; }
           if (typeof part.token === "string") content += part.token;
           if (part.done) complete = true;
@@ -234,12 +267,12 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
           },
         ]);
       } else {
+        const failure = await response.json().catch(() => ({}));
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content:
-              "Sorry, I encountered an error while processing your request. Please try again.",
+            content: failure.error || "AI request failed. Please try again.",
             timestamp: new Date(),
             id: Date.now().toString(),
           },
@@ -258,8 +291,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
         },
       ]);
     } finally {
-      pendingRequest.current = null;
-      if (!controller.signal.aborted) setIsLoading(false);
+      if (pendingRequest.current === controller) { pendingRequest.current = null; setIsLoading(false); }
     }
   };
 
@@ -301,10 +333,11 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                         isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
                     )}
                     onClick={onClose}
+                                    aria-label="Close AI chat"
                 />
 
                 {/* Side Panel */}
-                <div
+                <div ref={panelRef} role="dialog" aria-modal={isOpen || undefined} aria-label="AI Assistant" inert={!isOpen}
                     className={cn(
                         "fixed right-0 top-0 h-full w-full max-w-6xl bg-zinc-950 border-l border-zinc-800 z-50 flex flex-col transition-transform duration-300 ease-out shadow-2xl",
                         isOpen ? "translate-x-0" : "translate-x-full"
@@ -339,12 +372,6 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
                                         <DropdownMenuCheckboxItem
-                                            checked={autoSave}
-                                            onCheckedChange={setAutoSave}
-                                        >
-                                            Auto-save conversations
-                                        </DropdownMenuCheckboxItem>
-                                        <DropdownMenuCheckboxItem
                                             checked={streamResponse}
                                             onCheckedChange={setStreamResponse}
                                         >
@@ -365,6 +392,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                                     variant="ghost"
                                     size="sm"
                                     onClick={onClose}
+                                    aria-label="Close AI chat"
                                     className="h-8 w-8 p-0 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
                                 >
                                     <X className="h-4 w-4" />
@@ -378,7 +406,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                             onValueChange={(value) => setChatMode(value as typeof chatMode)}
                             className="px-6"
                         >
-                            <div className="flex items-center justify-between mb-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                                 <TabsList className="grid w-full grid-cols-4 max-w-md">
                                     <TabsTrigger value="chat" className="flex items-center gap-1">
                                         <MessageSquare className="h-3 w-3" />
@@ -404,18 +432,21 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                                     </TabsTrigger>
                                 </TabsList>
 
-                                <div className="flex items-center gap-2">
-                                    <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-400">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex items-center gap-2 text-xs text-zinc-400">
                                         <span className="text-zinc-500">Model:</span>
                                         <select
+                                            aria-label="Ollama model"
+                                            disabled={isLoading || models.length === 0}
+                                            title={modelError || "Installed Ollama models"}
                                             value={model}
-                                            onChange={(e) => setModel(e.target.value)}
-                                            className="bg-zinc-900/60 border border-zinc-800 rounded px-2 py-1 text-zinc-200 focus:outline-none"
+                                            onChange={(e) => { setModel(e.target.value); try { savePreferences({ ...preferences, model: e.target.value }); } catch { toast.error("Model selected for this session; preference could not be saved"); } }}
+                                            className="max-w-40 bg-zinc-900/60 border border-zinc-800 rounded px-2 py-1 text-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 disabled:opacity-50"
                                         >
-                                            <option value="gpt-6">gpt-6</option>
-                                            <option value="codellama">codellama</option>
-                                            <option value="llama2">llama2</option>
+                                            {!models.includes(model) && <option value={model}>{model || (modelError ? "Models unavailable" : "Loading models...")}</option>}
+                                            {models.map(name => <option key={name} value={name}>{name}</option>)}
                                         </select>
+                                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label="Refresh installed models" title={modelError || "Refresh installed models"} disabled={isLoading} onClick={() => setModelRevision(value => value + 1)}><RefreshCw className="h-3 w-3" /></Button>
                                     </div>
                                     <div className="relative">
                                         <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-zinc-500" />
@@ -558,9 +589,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        onClick={() =>
-                                                            navigator.clipboard.writeText(msg.content)
-                                                        }
+                                                        aria-label="Copy message" onClick={() => void navigator.clipboard.writeText(msg.content).then(() => toast.success("Message copied")).catch(() => toast.error("Could not copy message"))}
                                                         className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-200"
                                                     >
                                                         <Copy className="h-3 w-3" />
@@ -568,7 +597,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        onClick={() => setInput(msg.content)}
+                                                        aria-label="Reuse message" onClick={() => setInput(msg.content)}
                                                         className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-200"
                                                     >
                                                         <RefreshCw className="h-3 w-3" />
@@ -613,6 +642,8 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                     </div>
 
                     {/* Enhanced Input Form */}
+                    {activeSource && <label className="px-6 py-2 text-xs text-zinc-400 flex items-center gap-2"><input type="checkbox" checked={includeSource} onChange={event => setIncludeSource(event.target.checked)} />Include {activeSource.path} (up to 10,000 characters)</label>}
+                    {modelError && <p role="status" className="px-6 pb-2 text-xs text-amber-400">{modelError}. Use the refresh button to retry.</p>}
                     <form
                         onSubmit={handleSendMessage}
                         className="shrink-0 p-4 border-t border-zinc-800 bg-zinc-900/80 backdrop-blur-sm"
@@ -646,9 +677,11 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                                     </kbd>
                                 </div>
                             </div>
+                            {isLoading && <Button type="button" variant="outline" onClick={() => pendingRequest.current?.abort()}>Stop response</Button>}
                             <Button
+                                aria-label="Send message"
                                 type="submit"
-                                disabled={isLoading || !input.trim()}
+                                disabled={isLoading || !input.trim() || !models.includes(model)}
                                 className="h-11 px-4 bg-blue-600 hover:bg-blue-700 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                                 {isLoading ? (

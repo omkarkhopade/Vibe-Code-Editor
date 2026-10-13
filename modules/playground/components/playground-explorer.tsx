@@ -108,25 +108,25 @@ export function TemplateFileTree({
     setIsNewFolderDialogOpen(true);
   };
 
-  const handleCreateFile = (filename: string, extension: string) => {
+  const handleCreateFile = async (filename: string, extension: string) => {
     if (onAddFile && isRootFolder) {
       const newFile: TemplateFile = {
         filename,
         fileExtension: extension,
         content: "",
       };
-      onAddFile(newFile, "");
+      await onAddFile(newFile, "");
     }
     setIsNewFileDialogOpen(false);
   };
 
-  const handleCreateFolder = (folderName: string) => {
+  const handleCreateFolder = async (folderName: string) => {
     if (onAddFolder && isRootFolder) {
       const newFolder: TemplateFolder = {
         folderName,
         items: [],
       };
-      onAddFolder(newFolder, "");
+      await onAddFolder(newFolder, "");
     }
     setIsNewFolderDialogOpen(false);
   };
@@ -138,7 +138,7 @@ export function TemplateFileTree({
           <SidebarGroupLabel>{title}</SidebarGroupLabel>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <SidebarGroupAction>
+              <SidebarGroupAction aria-label="Add file or folder">
                 <Plus className="h-4 w-4" />
               </SidebarGroupAction>
             </DropdownMenuTrigger>
@@ -257,12 +257,11 @@ function TemplateNode({
 
   if (!isFolder) {
     const file = item as TemplateFile;
-    const fileName = `${file.filename}.${file.fileExtension}`;
+    const fileName = file.filename + (file.fileExtension ? "." + file.fileExtension : "");
 
     const isSelected =
       selectedFile &&
-      selectedFile.filename === file.filename &&
-      selectedFile.fileExtension === file.fileExtension;
+      "id" in selectedFile && selectedFile.id === [path, fileName].filter(Boolean).join("/");
 
     const handleRename = () => {
       setIsRenameDialogOpen(true);
@@ -272,13 +271,13 @@ function TemplateNode({
       setIsDeleteDialogOpen(true);
     };
 
-    const confirmDelete = () => {
-      onDeleteFile?.(file, path);
+    const confirmDelete = async () => {
+      await onDeleteFile?.(file, path);
       setIsDeleteDialogOpen(false);
     };
 
-    const handleRenameSubmit = (newFilename: string, newExtension: string) => {
-      onRenameFile?.(file, newFilename, newExtension, path);
+    const handleRenameSubmit = async (newFilename: string, newExtension: string) => {
+      await onRenameFile?.(file, newFilename, newExtension, path);
       setIsRenameDialogOpen(false);
     };
 
@@ -298,6 +297,7 @@ function TemplateNode({
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
+                aria-label={"Actions for " + fileName}
                 size="icon"
                 className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
               >
@@ -362,36 +362,36 @@ function TemplateNode({
       setIsDeleteDialogOpen(true);
     };
 
-    const confirmDelete = () => {
-      onDeleteFolder?.(folder, path);
+    const confirmDelete = async () => {
+      await onDeleteFolder?.(folder, path);
       setIsDeleteDialogOpen(false);
     };
 
-    const handleCreateFile = (filename: string, extension: string) => {
+    const handleCreateFile = async (filename: string, extension: string) => {
       if (onAddFile) {
         const newFile: TemplateFile = {
           filename,
           fileExtension: extension,
           content: "",
         };
-        onAddFile(newFile, currentPath);
+        await onAddFile(newFile, currentPath);
       }
       setIsNewFileDialogOpen(false);
     };
 
-    const handleCreateFolder = (folderName: string) => {
+    const handleCreateFolder = async (folderName: string) => {
       if (onAddFolder) {
         const newFolder: TemplateFolder = {
           folderName,
           items: [],
         };
-        onAddFolder(newFolder, currentPath);
+        await onAddFolder(newFolder, currentPath);
       }
       setIsNewFolderDialogOpen(false);
     };
 
-    const handleRenameSubmit = (newFolderName: string) => {
-      onRenameFolder?.(folder, newFolderName, path);
+    const handleRenameSubmit = async (newFolderName: string) => {
+      await onRenameFolder?.(folder, newFolderName, path);
       setIsRenameDialogOpen(false);
     };
 
@@ -415,6 +415,7 @@ function TemplateNode({
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
+                  aria-label={"Actions for folder " + folderName}
                   size="icon"
                   className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                 >

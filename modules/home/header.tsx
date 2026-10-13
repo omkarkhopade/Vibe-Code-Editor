@@ -20,7 +20,7 @@ export function Header() {
                             backdrop-blur-md
                             border-x border-b 
                             border-[rgba(230,230,230,0.7)] dark:border-[rgba(70,70,70,0.7)]
-                            w-full sm:min-w-[800px] sm:max-w-[1200px]
+                            w-full sm:min-w-0 sm:max-w-[1200px]
                             rounded-b-[28px]
                             px-4 py-2.5
                             relative
@@ -49,19 +49,19 @@ export function Header() {
                   {/* Desktop Navigation Links */}
                   <div className="hidden sm:flex items-center gap-4">
                     <Link
-                      href="/docs/components/background-paths"
+                      href="/docs"
                       className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
                     >
                       Docs
                     </Link>
                     {/* <Link
-                                            href="/pricing"
+                                            href="/docs#api"
                                             className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
                                         >
                                             Pricing
                                         </Link> */}
                     <Link
-                      href="https://codesnippetui.pro/templates?utm_source=codesnippetui.com&utm_medium=header"
+                      href="/docs#api"
                       target="_blank"
                       className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors flex items-center gap-2"
                     >
@@ -84,7 +84,7 @@ export function Header() {
                 {/* Mobile Navigation remains unchanged */}
                 <div className="flex sm:hidden items-center gap-4">
                   <Link
-                    href="/docs/components/action-search-bar"
+                    href="/docs"
                     className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
                   >
                     Docs

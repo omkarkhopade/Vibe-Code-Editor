@@ -22,16 +22,21 @@ interface NewFolderDialogProps {
   function NewFolderDialog({ isOpen, onClose, onCreateFolder }: NewFolderDialogProps) {
     const [folderName, setFolderName] = React.useState("")
   
-    const handleSubmit = (e: React.FormEvent) => {
-      e.preventDefault()
+    const [busy, setBusy] = React.useState(false);
+  const [failure, setFailure] = React.useState<string | null>(null);
+  const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+    if (busy) return; setBusy(true); setFailure(null);
+    try {
       if (folderName.trim()) {
-        onCreateFolder(folderName.trim())
+        await onCreateFolder(folderName.trim())
         setFolderName("")
       }
-    }
-  
-    return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
+    } catch { setFailure("Could not save this change. Your input has been kept; try again."); } finally { setBusy(false); }
+  };
+
+  return (
+      <Dialog open={isOpen} onOpenChange={() => { if (!busy) onClose(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Folder</DialogTitle>
@@ -53,11 +58,12 @@ interface NewFolderDialogProps {
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>
+            {failure && <p role="alert" className="text-sm text-destructive">{failure}</p>}
+          <DialogFooter>
+              <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!folderName.trim()}>
+              <Button type="submit" disabled={busy || !folderName.trim()}>
                 Create
               </Button>
             </DialogFooter>

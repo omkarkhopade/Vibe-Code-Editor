@@ -1,3 +1,4 @@
+import { persistOAuthAccount } from "@/modules/auth/lib/persist-oauth-account";
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import authConfig from "./auth.config";
@@ -6,7 +7,9 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter: PrismaAdapter(db),
   secret: process.env.AUTH_SECRET,
+  logger: { error(error) { console.error(JSON.stringify({ event: "auth_error", type: error.name })); } },
   session: { strategy: "jwt" },
+  events: { async signIn({ user, account }) { if (user.id) await persistOAuthAccount(user.id, account); } },
   callbacks: {
     // Account creation/linking belongs to the adapter. Never link users solely by email.
     async jwt({ token }) {

@@ -57,3 +57,7 @@ next-env.d.ts
 .npm-cache/
 .eslint-audit.json
 .dependency-audit.json
+/test-results/
+/.npm-audit-current.json
+
+/public/monaco/

@@ -9,6 +9,8 @@ export const usePlayground = (id: string) => {
   const [templateData, setTemplateData] = useState<TemplateFolder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const revision = useRef<string | null>(null);
+  const savePending = useRef(false);
   const pending = useRef<AbortController | null>(null);
   const loadPlayground = useCallback(async () => {
     pending.current?.abort();
@@ -31,6 +33,7 @@ export const usePlayground = (id: string) => {
       }
       if (controller.signal.aborted) return;
       if (!isTemplateFolder(template)) throw new Error("Saved template is invalid. Your saved data has not been overwritten.");
+      revision.current = data.revision;
       setPlaygroundData(data); setTemplateData(template);
       toast.success("Template loaded successfully");
     } catch (failure) {
@@ -40,9 +43,12 @@ export const usePlayground = (id: string) => {
     } finally { if (!controller.signal.aborted) setIsLoading(false); }
   }, [id]);
   const saveTemplateData = useCallback(async (data: TemplateFolder) => {
+    if (savePending.current) throw new Error("A save is already in progress. Please retry.");
+    savePending.current = true;
     const loadAtSave = pending.current;
-    try { await SaveUpdatedCode(id, data); if (pending.current !== loadAtSave || loadAtSave?.signal.aborted) return; setTemplateData(data); toast.success("Changes saved successfully"); }
-    catch (failure) { toast.error("Failed to save changes"); throw failure; }
+    try { const saved = await SaveUpdatedCode(id, data, revision.current); if (pending.current !== loadAtSave || loadAtSave?.signal.aborted) throw new Error("The original project was saved, but navigation changed. Reload the current project before continuing."); revision.current = saved.revision; setTemplateData(data); toast.success("Changes saved successfully"); }
+    catch (failure) { toast.error(failure instanceof Error ? failure.message : "Failed to save changes"); throw failure; }
+    finally { savePending.current = false; }
   }, [id]);
   useEffect(() => {
     const timer = setTimeout(() => { void loadPlayground(); }, 0);

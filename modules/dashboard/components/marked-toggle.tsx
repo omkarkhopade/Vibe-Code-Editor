@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 
 import { StarIcon, StarOffIcon } from "lucide-react"
 import type React from "react"
-import { useState, useEffect, forwardRef } from "react"
+import { useState, useEffect, useRef, forwardRef } from "react"
 import { toast } from "sonner"
 import { toggleStarMarked } from "../actions"
 
@@ -15,6 +15,7 @@ interface MarkedToggleButtonProps extends React.ComponentPropsWithoutRef<typeof 
 
 export const MarkedToggleButton = forwardRef<HTMLButtonElement, MarkedToggleButtonProps>(
   ({ markedForRevision, id, onClick, className, children, ...props }, ref) => {
+    const pending = useRef(false);
     const [isMarked, setIsMarked] = useState(markedForRevision)
 
     useEffect(() => {
@@ -22,6 +23,7 @@ export const MarkedToggleButton = forwardRef<HTMLButtonElement, MarkedToggleButt
     }, [markedForRevision])
 
     const handleToggle = async (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (pending.current) return; pending.current = true;
       // Call the original onClick if provided by the parent (DropdownMenuItem)
       onClick?.(event)
 
@@ -44,8 +46,8 @@ export const MarkedToggleButton = forwardRef<HTMLButtonElement, MarkedToggleButt
       } catch (error) {
         console.error("Failed to toggle mark for revision:", error)
         setIsMarked(!newMarkedState) // Revert state if the update fails
-        // You might want to add a toast notification here for the user
-      }
+        toast.error("Favorite could not be updated");
+      } finally { pending.current = false; }
     }
 
     return (

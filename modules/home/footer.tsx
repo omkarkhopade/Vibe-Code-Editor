@@ -7,7 +7,7 @@ import { GitBranch as LucideGithub } from "lucide-react";
 export function Footer() {
   const socialLinks = [
     {
-      href: "#",
+      href: "/docs#github",
       icon: (
         <LucideGithub className="w-5 h-5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors" />
       ),
@@ -21,7 +21,7 @@ export function Footer() {
         <div className="flex gap-4">
           {socialLinks.map((link, index) => (
             <Link
-              key={index}
+              aria-label="GitHub import documentation" key={index}
               href={link.href || "#"}
               target="_blank"
               rel="noopener noreferrer"
@@ -33,7 +33,7 @@ export function Footer() {
 
         {/* Copyright Notice */}
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          &copy; {new Date().getFullYear()} Codesnippet. All rights reserved.
+          &copy; {new Date().getFullYear()} Vibe Code Editor.
         </p>
       </div>
     </footer>

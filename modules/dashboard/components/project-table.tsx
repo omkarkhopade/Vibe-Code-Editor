@@ -42,7 +42,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 import {
   MoreHorizontal,
   Edit3,
@@ -78,6 +79,8 @@ export default function ProjectTable({
   onDuplicateProject,
 
 }: ProjectTableProps) {
+  const router = useRouter();
+  const pending = useRef(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -104,18 +107,21 @@ export default function ProjectTable({
   };
 
   const handleUpdateProject = async () => {
-    if (!selectedProject || !onUpdateProject) return;
+    if (!selectedProject || !onUpdateProject || pending.current) return;
+    pending.current = true;
 
     setIsLoading(true);
 
     try {
       await onUpdateProject(selectedProject.id, editData);
       setEditDialogOpen(false);
+      router.refresh();
       toast.success("Project updated successfully");
     } catch (error) {
       toast.error("Failed to update project");
       console.error("Error updating project:", error);
     } finally {
+      pending.current = false;
       setIsLoading(false);
     }
   };
@@ -123,41 +129,46 @@ export default function ProjectTable({
 
 
   const handleDeleteProject = async () => {
-    if (!selectedProject || !onDeleteProject) return;
+    if (!selectedProject || !onDeleteProject || pending.current) return;
+    pending.current = true;
 
     setIsLoading(true);
     try {
       await onDeleteProject(selectedProject.id);
       setDeleteDialogOpen(false);
       setSelectedProject(null);
+      router.refresh();
       toast.success("Project deleted successfully");
     } catch (error) {
       toast.error("Failed to delete project");
       console.error("Error deleting project:", error);
     } finally {
+      pending.current = false;
       setIsLoading(false);
     }
   };
 
   const handleDuplicateProject = async (project: Project) => {
-    if (!onDuplicateProject) return;
+    if (!onDuplicateProject || pending.current) return;
+    pending.current = true;
 
     setIsLoading(true);
     try {
       await onDuplicateProject(project.id);
+      router.refresh();
       toast.success("Project duplicated successfully");
     } catch (error) {
       toast.error("Failed to duplicate project");
       console.error("Error duplicating project:", error);
     } finally {
+      pending.current = false;
       setIsLoading(false);
     }
   };
 
-  const copyProjectUrl = (projectId: string) => {
+  const copyProjectUrl = async (projectId: string) => {
     const url = `${window.location.origin}/playground/${projectId}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Project url copied to clipboard");
+    try { await navigator.clipboard.writeText(url); toast.success("Project URL copied to clipboard"); } catch { toast.error("Could not copy URL. Check clipboard permissions."); }
   };
 
   return (
@@ -219,7 +230,7 @@ export default function ProjectTable({
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isLoading} aria-label={`Actions for ${project.title}`} title="Project actions (including delete)">
                         <MoreHorizontal className="h-4 w-4" />
                         <span className="sr-only">Open menu</span>
                       </Button>
@@ -284,7 +295,7 @@ export default function ProjectTable({
       </div>
 
       {/* Edit Project Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+      <Dialog open={editDialogOpen} onOpenChange={open => { if (!pending.current) setEditDialogOpen(open); }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit Project</DialogTitle>
@@ -342,7 +353,7 @@ export default function ProjectTable({
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={open => { if (!pending.current) setDeleteDialogOpen(open); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Project</AlertDialogTitle>
@@ -355,7 +366,7 @@ export default function ProjectTable({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteProject}
+              onClick={event => { event.preventDefault(); void handleDeleteProject(); }}
               disabled={isLoading}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

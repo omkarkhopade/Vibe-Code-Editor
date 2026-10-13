@@ -35,7 +35,7 @@ type TemplateSelectionModalProps = {
     title: string;
     template: "REACT" | "NEXTJS" | "EXPRESS" | "VUE" | "HONO" | "ANGULAR";
     description?: string;
-  }) => void;
+  }) => Promise<void>;
 };
 
 interface TemplateOption {
@@ -140,6 +140,7 @@ const TemplateSelectionModal = ({
   onClose,
   onSubmit,
 }: TemplateSelectionModalProps) => {
+  const [creating, setCreating] = useState(false);
   const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -172,7 +173,10 @@ const TemplateSelectionModal = ({
     }
   };
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
     if (selectedTemplate) {
       const templateMap: Record<
         string,
@@ -187,7 +191,7 @@ const TemplateSelectionModal = ({
       };
 
       const template = templates.find((t) => t.id === selectedTemplate);
-      onSubmit({
+      await onSubmit({
         title:projectName || `New ${template?.name} Project`,
         template:templateMap[selectedTemplate] || "REACT",
         description:template?.description
@@ -198,6 +202,7 @@ const TemplateSelectionModal = ({
       setSelectedTemplate(null);
       setProjectName("");
     }
+    } catch { /* The submitting parent displays the error; retain form values. */ } finally { setCreating(false); }
   };
 
   const handleBack = () => {
@@ -445,7 +450,7 @@ const TemplateSelectionModal = ({
               </Button>
               <Button
                 className="bg-[#E93F3F] hover:bg-[#d03636] text-white"
-                onClick={handleCreateProject}
+                disabled={creating} onClick={() => void handleCreateProject()}
               >
                 Create Project
               </Button>

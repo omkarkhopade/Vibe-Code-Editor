@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { readAIRequest } from "@/modules/ai/lib/request";
 import { generateText } from "@/modules/ai/lib/ollama";
+import { COMPLETION_SYSTEM_PROMPT } from "@/modules/ai/lib/prompts";
 import { ApiError, errorResponse } from "@/lib/api-error";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -103,38 +104,21 @@ function analyzeCodeContext(
 }
 
 function buildPrompt(context: CodeContext, suggestionType: string): string {
-  return `You are an expert code completion assistant. Generate a ${suggestionType} suggestion.
-
-Language: ${context.language}
-Framework: ${context.framework}
-
-Context:
-${context.beforeContext}
-${context.currentLine.substring(
-  0,
-  context.cursorPosition.column
-)}|CURSOR|${context.currentLine.substring(context.cursorPosition.column)}
-${context.afterContext}
-
-Analysis:
-- In Function: ${context.isInFunction}
-- In Class: ${context.isInClass}
-- After Comment: ${context.isAfterComment}
-- Incomplete Patterns: ${context.incompletePatterns.join(", ") || "None"}
-
-Instructions:
-1. Provide only the code that should be inserted at the cursor
-2. Maintain proper indentation and style
-3. Follow ${context.language} best practices
-4. Make the suggestion contextually appropriate
-
-Generate suggestion:`;
+  return JSON.stringify({
+    task: "Complete code at the cursor using the existing prefix and suffix",
+    suggestionType,
+    language: context.language,
+    framework: context.framework,
+    prefix: context.beforeContext + (context.beforeContext ? "\n" : "") + context.currentLine.slice(0, context.cursorPosition.column),
+    suffix: context.currentLine.slice(context.cursorPosition.column) + (context.afterContext ? "\n" + context.afterContext : ""),
+    cursor: context.cursorPosition,
+  });
 }
 
 async function generateSuggestion(prompt: string, signal: AbortSignal): Promise<string> {
-  const suggestion = await generateText(prompt, signal);
+  const suggestion = await generateText(prompt, signal, COMPLETION_SYSTEM_PROMPT, undefined, undefined, true);
   const code = suggestion.match(/```[\w]*\n?([\s\S]*?)```/);
-  return code ? code[1].trim() : suggestion;
+  return code ? code[1].replace(/\n$/, "") : suggestion;
 }
 
 // Helper functions for code analysis

@@ -28,7 +28,11 @@ export const useWebContainer = ({ playgroundId }: UseWebContainerProps): UseWebC
 
     async function initializeWebContainer() {
       try {
-        const webcontainerInstance = await WebContainer.boot();
+        let timedOut = false;
+        const boot = WebContainer.boot().then(value => { if (timedOut) value.teardown(); return value; });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let webcontainerInstance: WebContainer;
+        try { webcontainerInstance = await Promise.race([boot, new Promise<never>((_, reject) => { timer = setTimeout(() => { timedOut = true; reject(new Error("Browser runtime could not start within 30 seconds. Check browser support and network access, then reload to retry.")); }, 30000); })]); } finally { clearTimeout(timer); }
 
         if (!mounted) { webcontainerInstance.teardown(); return; }
         owned = webcontainerInstance;

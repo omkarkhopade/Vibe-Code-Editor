@@ -10,24 +10,32 @@ export function ollamaConfig() {
   if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 600000) throw new ApiError(503, "Invalid AI timeout configuration");
   return { base: base.replace(/\/$/, ""), model: process.env.OLLAMA_MODEL || "gpt-oss:20b", timeout };
 }
-export async function checkModel(signal: AbortSignal) {
+export async function listModels(signal: AbortSignal) {
   const config = ollamaConfig();
   const response = await fetch(config.base + "/api/tags", { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]), cache: "no-store" });
   if (!response.ok) throw new ApiError(503, "AI service is unavailable");
   const data = await response.json();
-  if (!Array.isArray(data.models) || !data.models.some((model: { name?: string }) => model.name === config.model)) throw new ApiError(503, "Configured AI model is not installed");
-  return config;
+  if (!Array.isArray(data.models)) throw new ApiError(502, "Invalid model catalog");
+  const allowed = process.env.OLLAMA_ALLOWED_MODELS?.split(",").map(name => name.trim()).filter(Boolean);
+  const names: string[] = data.models.flatMap((model: { name?: unknown }) => model && typeof model.name === "string" && model.name.length > 0 && model.name.length <= 200 ? [model.name] : []);
+  return { defaultModel: config.model, models: [...new Set(names)].filter(name => !allowed || allowed.includes(name)).sort() };
 }
-export async function generateText(prompt: string, signal: AbortSignal, system?: string, onToken?: (token: string) => void): Promise<string> {
+export async function checkModel(signal: AbortSignal, selectedModel?: string) {
+  const config = ollamaConfig();
+  const model = selectedModel ?? config.model;
+  const catalog = await listModels(signal);
+  if (!catalog.models.includes(model)) throw new ApiError(selectedModel ? 400 : 503, "Selected AI model is not available or permitted");
+  return { ...config, model };
+}
+export async function generateText(prompt: string, signal: AbortSignal, system?: string, onToken?: (token: string) => void, selectedModel?: string, preserveWhitespace = false): Promise<string> {
   if (active) throw new ApiError(429, "AI is busy. Please try again shortly.");
   active = true;
   try {
-    const config = ollamaConfig();
-    const combined = AbortSignal.any([signal, AbortSignal.timeout(config.timeout)]);
-    await checkModel(combined);
+    const combined = AbortSignal.any([signal, AbortSignal.timeout(ollamaConfig().timeout)]);
+    const config = await checkModel(combined, selectedModel);
     const response = await fetch(config.base + "/api/generate", {
       method: "POST", signal: combined, headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: config.model, prompt, system, stream: !!onToken, think: "low", keep_alive: "2m", options: { temperature: 0.3, num_predict: 1024, num_ctx: 4096 } }),
+      body: JSON.stringify({ model: config.model, prompt, system, stream: !!onToken, ...(config.model.startsWith("gpt-oss:") ? { think: "low" } : {}), keep_alive: "2m", options: { temperature: 0.3, num_predict: 1024, num_ctx: 4096 } }),
     });
     if (!response.ok) throw new ApiError(503, "AI generation failed. Please try again later.");
     if (onToken) {
@@ -41,11 +49,11 @@ export async function generateText(prompt: string, signal: AbortSignal, system?:
         if (part.done) complete = true;
       });
       if (!complete || !result.trim()) throw new ApiError(502, "AI stream ended without a complete response");
-      return result.trim();
+      return preserveWhitespace ? result : result.trim();
     }
     const data = await response.json();
     if (typeof data.response !== "string" || !data.response.trim()) throw new ApiError(502, "AI returned an empty response");
-    return data.response.trim();
+    return preserveWhitespace ? data.response : data.response.trim();
   } catch (error) {
     if (error instanceof ApiError) throw error;
     if (signal.aborted) throw new ApiError(499, "Request cancelled");
