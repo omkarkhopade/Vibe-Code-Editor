@@ -1,4 +1,4 @@
-﻿import { test } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import load from './load-ts.mjs';
 const id = 'cmv3c5fcw0001f7vkgky4pjhy';
@@ -75,9 +75,17 @@ test('upgraded KaTeX retains inline/block rendering and rejects untrusted HTML c
 });
 
 test('preview source synchronization removes old file paths without deleting dependency directories', async () => {
- const { syncSource } = load('modules/webcontainers/hooks/sync-source.ts'); const removed = []; let mounted;
+ const { syncSource } = load('modules/webcontainers/hooks/sync-source.ts'); const removed = []; const written = [];
  const previous = { folderName: 'Root', items: [{ filename: 'old', fileExtension: 'js', content: 'before' }] };
  const next = { folderName: 'Root', items: [{ filename: 'new', fileExtension: 'js', content: 'after' }] };
- await syncSource({ fs: { rm: async (...args) => removed.push(args) }, mount: async value => { mounted = value; } }, previous, next);
- assert.deepEqual(removed, [['old.js', { force: true }]]); assert.equal(mounted['new.js'].file.contents, 'after');
+ await syncSource({ fs: { rm: async (...args) => removed.push(args), writeFile: async (...args) => written.push(args) } }, previous, next);
+ assert.deepEqual(removed, [['old.js', { force: true }]]); assert.deepEqual(written, [['new.js', 'after']]);
+});
+
+test('live preview writes only changed buffers and creates new empty directories', async () => {
+ const { syncSource } = load('modules/webcontainers/hooks/sync-source.ts'); const written = [], directories = [];
+ const previous = {folderName:'Root',items:[{filename:'App',fileExtension:'tsx',content:'before'},{filename:'package',fileExtension:'json',content:'{}'}]};
+ const next = {folderName:'Root',items:[{filename:'App',fileExtension:'tsx',content:'after'},previous.items[1],{folderName:'empty',items:[]}]};
+ await syncSource({fs:{writeFile:async (...args)=>written.push(args),mkdir:async (...args)=>directories.push(args),rm:async ()=>assert.fail('No removed files')}},previous,next);
+ assert.deepEqual(written,[['App.tsx','after']]); assert.deepEqual(directories,[['empty',{recursive:true}]]);
 });

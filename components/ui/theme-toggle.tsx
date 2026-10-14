@@ -6,7 +6,7 @@ import { Moon, Sun } from "lucide-react";
 
 const subscribe = () => () => {};
 export function ThemeToggle() {
-  const { setTheme, theme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
   const mounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   if (!mounted) {
@@ -14,17 +14,17 @@ export function ThemeToggle() {
   }
 
   return (
-    <div
+    <button type="button" aria-label="Toggle color theme"
       className="cursor-pointer"
       onClick={() => {
-        setTheme(theme === "light" ? "dark" : "light");
+        setTheme(resolvedTheme === "light" ? "dark" : "light");
       }}
     >
-      {theme === "light" ? (
+      {resolvedTheme === "light" ? (
         <Moon className="h-5 w-5 text-black" />
       ) : (
         <Sun className="h-5 w-5 text-white" color="white" />
       )}
-    </div>
+    </button>
   );
 }

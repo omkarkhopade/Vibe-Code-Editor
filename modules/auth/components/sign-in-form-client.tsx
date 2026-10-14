@@ -51,15 +51,11 @@ const SignInFormClient = () => {
 
       <CardFooter>
         <p className="text-sm text-center text-gray-500 dark:text-gray-400 w-full">
-          By signing in, you agree to our{" "}
-          <a href="#" className="underline hover:text-primary">
-            Terms of Service
+          Read the{" "}
+          <a href="/docs" className="underline hover:text-primary">
+            editor guide
           </a>{" "}
-          and{" "}
-          <a href="#" className="underline hover:text-primary">
-            Privacy Policy
-          </a>
-          .
+          for information about projects, GitHub imports and AI assistance.
         </p>
       </CardFooter>
     </Card>

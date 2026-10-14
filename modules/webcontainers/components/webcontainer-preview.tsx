@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useRef } from "react";
 
 import { syncSource } from "../hooks/sync-source";
-import { transformToWebContainerFormat } from "../hooks/transformer";
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -15,6 +14,7 @@ import TerminalComponent, { type TerminalRef } from "./terminal";
 interface WebContainerPreviewProps {
 
   templateData: TemplateFolder;
+  hasUnsavedChanges?: boolean;
   serverUrl: string;
   isLoading: boolean;
   error: string | null;
@@ -25,6 +25,7 @@ interface WebContainerPreviewProps {
 }
 const WebContainerPreview = ({
   templateData,
+  hasUnsavedChanges = false,
   error,
   instance,
   isLoading,
@@ -43,12 +44,14 @@ const WebContainerPreview = ({
   useEffect(() => {
     if (!instance) return;
     let disposed = false;
-    syncQueue.current = syncQueue.current.catch(() => {}).then(async () => {
-      if (disposed) return;
-      await syncSource(instance, mountedSource.current, templateData);
-      mountedSource.current = templateData;
-    }).catch(() => { if (!disposed) setSetupError("Source was saved, but the preview could not synchronize. Restart the preview."); });
-    return () => { disposed = true; };
+    const timer = setTimeout(() => {
+      syncQueue.current = syncQueue.current.catch(() => {}).then(async () => {
+        if (disposed) return;
+        await syncSource(instance, mountedSource.current, templateData);
+        mountedSource.current = templateData;
+      }).catch(() => { if (!disposed) setSetupError("Preview could not synchronize your edits. Retry the preview."); });
+    }, 300);
+    return () => { disposed = true; clearTimeout(timer); };
   }, [instance, templateData]);
   useEffect(() => {
     if (!instance) return;
@@ -58,7 +61,16 @@ const WebContainerPreview = ({
     const off = instance.on("server-ready", (_port, url) => {
       if (!disposed) { timers.forEach(clearTimeout); setSetupError(null); setPreviewUrl(url); setCurrentStep(4); }
     });
-    const write = (data: string) => { if (!disposed) terminalRef.current?.writeToTerminal(data); };
+    let recentOutput = "";
+    const write = (data: string) => {
+      if (disposed) return;
+      terminalRef.current?.writeToTerminal(data);
+      recentOutput = (recentOutput + data).slice(-4096);
+      if (recentOutput.includes("[nodemon] app crashed")) {
+        recentOutput = "";
+        setSetupError("The application crashed; its development watcher is still running. Check the startup error in the terminal below.");
+      }
+    };
     async function run(command: string[]) {
       const process = await instance!.spawn("npm", command);
       if (disposed) { process.kill(); return null; }
@@ -68,17 +80,22 @@ const WebContainerPreview = ({
     }
     async function setup() {
       try {
-        const files = transformToWebContainerFormat(initialTemplate.current);
-        await instance!.mount(files);
+        const source = initialTemplate.current;
+        syncQueue.current = syncQueue.current.catch(() => {}).then(async () => {
+          if (disposed) return;
+          await syncSource(instance!, mountedSource.current, source);
+          mountedSource.current = source;
+        });
+        await syncQueue.current;
         if (disposed) return;
-        setPreviewUrl(""); setSetupError(null); setCurrentStep(2);
+        setPreviewUrl(""); setSetupError(null); setCurrentStep(3);
         write("Installing dependencies...\r\n");
         const install = await run(["install"]);
         if (!install) return;
         const exit = await Promise.race([install.exit, new Promise<never>((_, reject) => { timers.push(setTimeout(() => { install.kill(); reject(new Error("Dependency installation timed out. Check registry access and retry.")); }, 180000)); })]);
         if (disposed) return;
         if (exit !== 0) throw new Error("Dependency installation failed");
-        setCurrentStep(3);
+        setCurrentStep(4);
         const manifest = JSON.parse(await instance!.fs.readFile("package.json", "utf8"));
         const script = manifest.scripts?.dev ? "dev" : "start";
         const server = await run(["run", script]);
@@ -96,126 +113,56 @@ const WebContainerPreview = ({
     return () => { disposed = true; timers.forEach(clearTimeout); off(); processes.forEach(process => process.kill()); };
   }, [instance, forceResetup, restart]);
 
-  if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center space-y-4 max-w-md p-6 rounded-lg bg-gray-50 dark:bg-gray-900">
-          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-          <h3 className="text-lg font-medium">Initializing WebContainer</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Setting up the environment for your project...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || setupError) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-6 rounded-lg max-w-md">
-          <div className="flex items-center gap-2 mb-3">
-            <XCircle className="h-5 w-5" />
-            <h3 className="font-semibold">Error</h3>
-          </div>
-          <p className="text-sm">{error || setupError}</p><Button className="mt-4" variant="outline" onClick={() => { if (error) window.location.reload(); else { initialTemplate.current = templateData; setRestart(value => value + 1); } }}>Retry preview</Button>
-        </div>
-      </div>
-    );
-  }
-  const getStepIcon = (stepIndex: number) => {
-    if (stepIndex < currentStep) {
-      return <CheckCircle className="h-5 w-5 text-green-500" />;
-    } else if (stepIndex === currentStep) {
-      return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />;
-    } else {
-      return <div className="h-5 w-5 rounded-full border-2 border-gray-300" />;
-    }
+  const retry = () => {
+    if (error) { window.location.reload(); return; }
+    initialTemplate.current = templateData;
+    setRestart(value => value + 1);
   };
-
-  const getStepText = (stepIndex: number, label: string) => {
-    const isActive = stepIndex === currentStep;
-    const isComplete = stepIndex < currentStep;
-
-    return (
-      <span
-        className={`text-sm font-medium ${
-          isComplete
-            ? "text-green-600"
-            : isActive
-            ? "text-blue-600"
-            : "text-gray-500"
-        }`}
-      >
-        {label}
-      </span>
-    );
+  const reload = async () => {
+    if (!instance) return;
+    try {
+      syncQueue.current = syncQueue.current.catch(() => {}).then(async () => {
+        await syncSource(instance, mountedSource.current, templateData);
+        mountedSource.current = templateData;
+      });
+      await syncQueue.current;
+      setPreviewRevision(value => value + 1);
+    } catch { setSetupError("Preview could not synchronize your edits. Retry the preview."); }
   };
-
   return (
-    <div className="h-full w-full flex flex-col">
-      <div className="flex gap-2 border-b p-2"><Button size="sm" variant="outline" onClick={() => { initialTemplate.current = templateData; setRestart(value => value + 1); }}>Restart server</Button><Button size="sm" variant="ghost" disabled={!previewUrl} onClick={() => setPreviewRevision(value => value + 1)}>Reload preview</Button></div>
-      {!previewUrl ? (
-        <div className="h-full flex flex-col">
-          <div className="w-full max-w-md p-6 m-5 rounded-lg bg-white dark:bg-zinc-800 shadow-sm mx-auto">
-            <Progress
-              value={(currentStep / totalSteps) * 100}
-              className="h-2 mb-6"
-            />
-
-            <div className="space-y-4 mb-6">
-              <div className="flex items-center gap-3">
-                {getStepIcon(1)}
-                {getStepText(1, "Transforming template data")}
-              </div>
-              <div className="flex items-center gap-3">
-                {getStepIcon(2)}
-                {getStepText(2, "Mounting files")}
-              </div>
-              <div className="flex items-center gap-3">
-                {getStepIcon(3)}
-                {getStepText(3, "Installing dependencies")}
-              </div>
-              <div className="flex items-center gap-3">
-                {getStepIcon(4)}
-                {getStepText(4, "Starting development server")}
-              </div>
-            </div>
+    <div className="h-full w-full flex flex-col min-h-0">
+      <div className="flex flex-wrap gap-2 border-b p-2">
+        <Button size="sm" variant="outline" disabled={!instance} onClick={retry}>Restart server</Button>
+        <Button size="sm" variant="ghost" disabled={!previewUrl} onClick={() => void reload()}>Reload preview</Button>
+      </div>
+      {hasUnsavedChanges && <p role="status" className="border-b px-3 py-2 text-xs text-muted-foreground">Preview includes unsaved edits. Use Save All to keep them after reopening.</p>}
+      <div className="flex-1 min-h-0 overflow-auto">
+        {error || setupError ? (
+          <div className="m-4 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-5 space-y-3">
+            <h3 className="font-semibold flex gap-2 items-center"><XCircle className="h-5 w-5" />Preview could not start</h3>
+            <p className="text-sm">{error || setupError}</p>
+            <p className="text-sm">The terminal below keeps the startup output. Check for missing environment variables, unavailable services or unsupported native dependencies. An API needs to start a listening server before it can show a response.</p>
+            <Button variant="outline" onClick={retry}>Retry preview</Button>
           </div>
-
-          {/* Terminal */}
-          <div className="flex-1 p-4">
-            <TerminalComponent
-              ref={terminalRef}
-              webContainerInstance={instance}
-              theme="dark"
-              className="h-full"
-            />
+        ) : isLoading ? (
+          <div className="p-6 flex items-center gap-3"><Loader2 className="h-5 w-5 animate-spin" />Initializing WebContainer</div>
+        ) : previewUrl ? (
+          <iframe key={previewRevision} src={previewUrl} className="w-full h-full border-none" title="WebContainer Preview" />
+        ) : (
+          <div className="max-w-md p-6 m-5 rounded-lg bg-white dark:bg-zinc-800 mx-auto">
+            <Progress value={(currentStep / totalSteps) * 100} className="h-2 mb-6" />
+            <div className="space-y-4">{["Transforming template data", "Mounting files", "Installing dependencies", "Starting development server"].map((label, index) => (
+              <div key={label} className="flex items-center gap-3 text-sm">
+                {index + 1 < currentStep ? <CheckCircle className="h-5 w-5 text-green-500" /> : <Loader2 className={index + 1 === currentStep ? "h-5 w-5 animate-spin" : "h-5 w-5 text-muted-foreground"} />}{label}
+              </div>
+            ))}</div>
           </div>
-        </div>
-      ) : (
-        <div className="h-full flex flex-col">
-          <div className="flex-1">
-            <iframe
-              key={previewRevision}
-              src={previewUrl}
-              className="w-full h-full border-none"
-              title="WebContainer Preview"
-            />
-          </div>
-
-          <div className="h-64 border-t">
-            <TerminalComponent
-              ref={terminalRef}
-              webContainerInstance={instance}
-              theme="dark"
-              className="h-full"
-            />
-          </div>
-        </div>
-      )}
+        )}
+      </div>
+      {instance && <div className="h-64 shrink-0 border-t">
+        <TerminalComponent ref={terminalRef} webContainerInstance={instance} theme="dark" className="h-full" />
+      </div>}
     </div>
   );
 };
-
 export default WebContainerPreview;

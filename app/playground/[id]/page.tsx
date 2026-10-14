@@ -38,7 +38,7 @@ import WebContainerPreview from "@/modules/webcontainers/components/webcontainer
 import { useWebContainer } from "@/modules/webcontainers/hooks/useWebContainer";
 import { AlertCircle, FileText, FolderOpen, Save, Settings, X } from "lucide-react";
 import { useParams } from "next/navigation";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const MainPlaygroundPage = () => {
@@ -157,6 +157,10 @@ const MainPlaygroundPage = () => {
 
   const activeFile = openFiles.find((file) => file.id === activeFileId);
   const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges);
+  // Preview uses current buffers; durable persistence still requires Save / Save All.
+  const previewTemplate = useMemo(() => templateData ? updateFilesByPath(templateData,
+    new Map(openFiles.filter(file => file.hasUnsavedChanges).map(file => [file.id, file.content]))) : null,
+    [templateData, openFiles]);
   const closeFile = (fileId: string) => { const file = useFileExplorer.getState().openFiles.find(file => file.id === fileId); if (!file?.hasUnsavedChanges || window.confirm("Discard unsaved changes in " + file.id + "?")) discardFile(fileId); };
   const closeAllFiles = () => { if (!hasUnsavedChanges || window.confirm("Discard all unsaved changes?")) discardAllFiles(); };
   useEffect(() => {
@@ -413,6 +417,7 @@ const MainPlaygroundPage = () => {
                   >
                     <ResizablePanel defaultSize={isPreviewVisible ? "50%" : "100%"}>
                       <PlaygroundEditor filePath={activeFile ? `${id}/${activeFile.id}` : undefined}
+                        suggestionError={aiSuggestions.error}
                         activeFile={activeFile}
                         content={activeFile?.content || ""}
                         onContentChange={(value) => 
@@ -437,7 +442,8 @@ const MainPlaygroundPage = () => {
                         <ResizableHandle />
                         <ResizablePanel defaultSize="50%">
                           <WebContainerPreview key={id}
-                            templateData={templateData}
+                            templateData={previewTemplate || templateData}
+                            hasUnsavedChanges={hasUnsavedChanges}
                             instance={instance}
                             writeFileSync={writeFileSync}
                             isLoading={containerLoading}

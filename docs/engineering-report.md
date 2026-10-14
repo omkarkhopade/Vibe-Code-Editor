@@ -1,3 +1,5 @@
+> Current results: [Functional completeness report, 2026-10-14](functional-completeness-report.md). The sections below preserve earlier checkpoints; their browser, dependency and cross-tab-save limitations are superseded where identified by the current report.
+
 # Engineering report — Vibe Code Editor
 
 Audit date: 2026-10-12. Work performed directly in the existing repository. The initial working tree was clean. No production deployment, database mutation/migration, model download or secret overwrite was performed.

@@ -80,6 +80,18 @@ test('completion sends a separate system prompt and preserves insertion whitespa
   assert.equal(result, '\n  return value;\n');
   assert.equal(sent.system, COMPLETION_SYSTEM_PROMPT); assert.match(sent.system, /untrusted/); assert.match(sent.system, /do not repeat/);
 });
+test('blank model allowlist permits installed models while configured allowlist restricts inference', async t => {
+  const previous = process.env.OLLAMA_ALLOWED_MODELS;
+  t.after(() => { if (previous === undefined) delete process.env.OLLAMA_ALLOWED_MODELS; else process.env.OLLAMA_ALLOWED_MODELS = previous; });
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ models: [{ name: 'gpt-oss:20b' }, { name: 'coder:latest' }] }));
+  const provider = load('modules/ai/lib/ollama.ts');
+  process.env.OLLAMA_ALLOWED_MODELS = '  ';
+  assert.equal((await provider.listModels(new AbortController().signal)).models.length, 2);
+  process.env.OLLAMA_ALLOWED_MODELS = ' gpt-oss:20b ';
+  assert.deepEqual((await provider.listModels(new AbortController().signal)).models, ['gpt-oss:20b']);
+  await assert.rejects(provider.checkModel(new AbortController().signal, 'coder:latest'), error => error.status === 400);
+});
+
 test('model catalog endpoint requires authentication and reveals no internal endpoint', async () => {
   const mocks = { '@/modules/auth/actions': { currentUser: async () => ({ id: 'owner' }) }, '@/modules/ai/lib/ollama': { listModels: async () => ({ defaultModel: 'gpt-oss:20b', models: ['gpt-oss:20b'] }) } };
   const { GET } = load('app/api/ai/models/route.ts', mocks);

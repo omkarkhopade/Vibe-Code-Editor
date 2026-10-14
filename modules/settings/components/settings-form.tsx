@@ -45,6 +45,7 @@ export default function SettingsForm({ profile }: { profile: { name: string | nu
       <p className="text-sm text-muted-foreground">Connect while signed in to link GitHub to this account. Reconnect with the same GitHub identity to replace revoked credentials. Accounts belonging to another user cannot be linked.</p>
       <p className="text-sm text-muted-foreground">Public imports require no repository permissions. Private imports require an existing authorization that permits that repository. GitHub OAuth has no read-only private-repository scope, so this app does not request the broad write-enabled repo scope.</p>
       <Button onClick={() => void signIn("github", { redirectTo: "/settings" })}>Connect / reconnect GitHub</Button>
+      <Button variant="outline" onClick={() => setRevision(value => value + 1)}>Refresh GitHub status</Button>
       <p className="text-xs text-muted-foreground">To revoke GitHub access, use GitHub Settings → Applications. This does not delete your editor account. Provider unlinking is unavailable to prevent accidental account lockout.</p>
     </section>
     <section className="border rounded-lg bg-muted p-6 space-y-4"><h2 className="text-lg font-semibold">AI preferences</h2>

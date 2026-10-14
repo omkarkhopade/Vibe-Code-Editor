@@ -3,7 +3,7 @@ if (process.env.DATABASE_URL !== 'mongodb://127.0.0.1:1/isolated_browser_fixture
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- Node preload must be CommonJS
 const Module = require('node:module'), originalLoad = Module._load;
 const user = { id: 'cmtestuser0000000000000001', name: 'Browser Tester', email: 'browser@example.invalid', role: 'USER', image: null, accounts: [{ provider: 'github' }] };
-const source = { folderName: 'fixture', items: [{ filename: 'index', fileExtension: 'js', content: 'console.log("fixture");\n' }, { filename: 'package', fileExtension: 'json', content: JSON.stringify({ scripts: { dev: 'node index.js' } }) }] };
+const source = { folderName: 'fixture', items: [{ filename: 'index', fileExtension: 'js', content: 'require("node:http").createServer((req, res) => res.end("Fixture preview running")).listen(3000, "0.0.0.0");\n' }, { filename: 'package', fileExtension: 'json', content: JSON.stringify({ scripts: { dev: 'node index.js' } }) }] };
 const projects = new Map(); let counter = 1;
 function create(data) {
  const id = 'cmfixture' + String(counter++).padStart(16, '0'), nested = data.templateFiles?.create;
@@ -28,7 +28,18 @@ Module._load = function(name, ...rest) { if (name.startsWith('@prisma/client')) 
 const realFetch = global.fetch;
 global.fetch = async (input, options) => {
  const url = String(input);
- if (url.startsWith('http://fixture-ollama.invalid')) { if (url.endsWith('/api/tags')) return Response.json({ models: [{ name: 'gpt-oss:20b' }, { name: 'fixture:small' }] }); const body = JSON.parse(options.body); return body.stream ? new Response(JSON.stringify({ response: 'Fixture AI response', done: true }) + '\n', { headers: { 'Content-Type': 'application/x-ndjson' } }) : Response.json({ response: '  // fixture suggestion\n' }); }
+ if (url.startsWith('http://fixture-ollama.invalid')) { if (url.endsWith('/api/tags')) return Response.json({ models: [{ name: 'gpt-oss:20b' }, { name: 'fixture:small' }] }); const body = JSON.parse(options.body);
+  if (body.stream && body.prompt?.includes('Slow fixture')) {
+   let timer;
+   return new Response(new ReadableStream({
+    start(controller) {
+     controller.enqueue(new TextEncoder().encode(JSON.stringify({ response: 'Waiting fixture', done: false }) + '\n'));
+     timer = setTimeout(() => { controller.enqueue(new TextEncoder().encode(JSON.stringify({ response: ' finished', done: true }) + '\n')); controller.close(); }, 10000);
+    },
+    cancel() { clearTimeout(timer); }
+   }), { headers: { 'Content-Type': 'application/x-ndjson' } });
+  }
+  return body.stream ? new Response(JSON.stringify({ response: 'Fixture AI response', done: true }) + '\n', { headers: { 'Content-Type': 'application/x-ndjson' } }) : Response.json({ response: '  // fixture suggestion\n' }); }
  if (url.startsWith('https://api.github.com')) {
   if (url === 'https://api.github.com/user') return Response.json({ login: 'fixture-user' });
   if (url.includes('/user/repos?')) return Response.json([{ full_name: 'fixture/node-project', html_url: 'https://github.com/fixture/node-project', default_branch: 'main', private: false }]);

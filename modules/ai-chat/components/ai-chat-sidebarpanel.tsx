@@ -156,7 +156,8 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                 if (!Array.isArray(catalog.models) || typeof catalog.defaultModel !== "string") throw new Error("Invalid model catalog");
                 setModels(catalog.models);
                 if (!controller.signal.aborted) setModel(preferredModel || catalog.defaultModel);
-                setModelError(catalog.models.length ? null : "No installed models available");
+                const selected = preferredModel || catalog.defaultModel;
+                setModelError(!catalog.models.length ? "No installed models available" : !catalog.models.includes(selected) ? "Selected model is unavailable. Choose an installed model" : null);
             })
             .catch(error => { if (!controller.signal.aborted) setModelError(error instanceof Error ? error.message : "Could not load models"); });
         return () => controller.abort();
@@ -444,6 +445,7 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                                             className="max-w-40 bg-zinc-900/60 border border-zinc-800 rounded px-2 py-1 text-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 disabled:opacity-50"
                                         >
                                             {!models.includes(model) && <option value={model}>{model || (modelError ? "Models unavailable" : "Loading models...")}</option>}
+                                            {model && !models.includes(model) && <option value={model}>{model} (unavailable)</option>}
                                             {models.map(name => <option key={name} value={name}>{name}</option>)}
                                         </select>
                                         <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label="Refresh installed models" title={modelError || "Refresh installed models"} disabled={isLoading} onClick={() => setModelRevision(value => value + 1)}><RefreshCw className="h-3 w-3" /></Button>

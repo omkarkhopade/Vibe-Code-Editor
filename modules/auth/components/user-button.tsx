@@ -20,7 +20,7 @@ const UserButton = () => {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>
+      <DropdownMenuTrigger aria-label="Account menu">
         <div className={cn("relative rounded-full")}>
           <Avatar>
             <AvatarImage src={(user?.image || "")} alt={(user?.name || "User")} />

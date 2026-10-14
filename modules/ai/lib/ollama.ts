@@ -16,7 +16,7 @@ export async function listModels(signal: AbortSignal) {
   if (!response.ok) throw new ApiError(503, "AI service is unavailable");
   const data = await response.json();
   if (!Array.isArray(data.models)) throw new ApiError(502, "Invalid model catalog");
-  const allowed = process.env.OLLAMA_ALLOWED_MODELS?.split(",").map(name => name.trim()).filter(Boolean);
+  const allowed = process.env.OLLAMA_ALLOWED_MODELS?.trim() ? process.env.OLLAMA_ALLOWED_MODELS.split(",").map(name => name.trim()).filter(Boolean) : undefined;
   const names: string[] = data.models.flatMap((model: { name?: unknown }) => model && typeof model.name === "string" && model.name.length > 0 && model.name.length <= 200 ? [model.name] : []);
   return { defaultModel: config.model, models: [...new Set(names)].filter(name => !allowed || allowed.includes(name)).sort() };
 }

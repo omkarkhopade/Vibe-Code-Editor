@@ -2,7 +2,7 @@
 
 AI-assisted browser IDE built with Next.js 16.3.8, React 19.3, TypeScript 6, Auth.js 5 beta, Prisma 6.19.3/MongoDB, Monaco, WebContainers and Ollama. Existing layouts and styling are retained.
 
-Features include Google/GitHub sign-in, owner-scoped playgrounds, six starter templates, persisted source trees, file editing, browser execution, code completion and streaming AI chat. See [engineering report](docs/engineering-report.md) for verified behavior and release limitations.
+Features include Google/GitHub sign-in, owner-scoped playgrounds, six starter templates, persisted source trees, file editing, browser execution, code completion and streaming AI chat. See the current [functional completeness report](docs/functional-completeness-report.md) for the interaction matrix, verified journeys and remaining release blockers.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Generated code runs inside browser WebContainers. The Next.js server does not ex
 Use Node.js 24 and npm. On Windows PowerShell, use `npm.cmd`/`npx.cmd` if execution policy blocks npm.ps1. Do not overwrite existing environment files.
 
 1. Configure local environment variables using [.env.example](.env.example) as a reference. Preserve existing secrets.
-2. Run `npm ci` in a clean checkout. Postinstall generates Prisma Client.
+2. Run `npm ci` in a clean checkout. Postinstall generates Prisma Client and prepares local Monaco assets.
 3. Configure MongoDB with a replica set, network allowlists and TLS. Prisma uses DATABASE_URL; Next.js and prisma.config.ts load the Next.js environment conventions.
 4. Configure Google and/or GitHub OAuth apps. Local callbacks are `http://localhost:3000/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/github`. Use your HTTPS origin in production.
 5. Start the already-installed Ollama service and verify `ollama list` contains `gpt-oss:20b`. The application does not download models.
@@ -59,6 +59,7 @@ npm run typecheck
 npm run lint -- --max-warnings=0
 npm test
 npm run build
+npm run test:browser
 npm audit
 npm start
 ```
@@ -92,3 +93,17 @@ See [deployment notes](docs/deployment.md). A successful build is not a verified
 Open Github Repository on the dashboard imports a Node.js source snapshot from an HTTPS GitHub repository URL, with an optional branch/ref. The project must have a root package.json with a dev or start script. Imports resolve to a fixed commit and create an owned playground; they do not sync or push changes.
 
 Public repositories are supported. Private repositories require a linked GitHub OAuth account whose existing token has repository access; the application does not request additional scopes automatically. Tokens remain server-side. Imports permit 200 text files, 4 MB total, and 1 MB per file. Environment/key files, known binary assets, symlinks, submodules and generated directories are excluded. These filename filters are not a comprehensive secret scanner. Incomplete or oversized trees are rejected. Dependencies and scripts execute only in the browser WebContainer when the playground runs. Native dependencies or required omitted assets may need manual adaptation.
+
+## Settings, persistence and browser verification
+
+`/settings` saves your display name to your account and saves font size, tab size, word wrap and chat-model preference per account in the current browser. Source editing uses explicit Save / Save All; stale concurrent saves are rejected. Chat history is session-local and can be exported.
+
+For GitHub access, use Settings ? Connect / reconnect GitHub, then Refresh GitHub status. Reauthorization persists the newly verified credential. Public imports can recover anonymously from a revoked token. Browse repositories in the dashboard import dialog; private access depends on existing authorization.
+
+`npm run test:browser` runs Chrome against the production build on port 3107 with a synthetic session, in-memory database and provider fixtures. Install Chrome first (or set `PLAYWRIGHT_CHANNEL` to another installed compatible channel). Set `TEST_PREVIEW=1` to additionally verify real WebContainer serving, restart/reload and terminal execution; StackBlitz/npm network access is required. Screenshots are written to ignored `test-results/`. This does not verify your real OAuth account or mutate your database.
+
+`npm run prepare:editor` copies the installed Monaco distribution and license into generated `public/monaco/`. It includes a narrowly scoped cancellation workaround for Monaco 0.57.0 and intentionally fails if an upgrade requires reviewing that patch. Deploy generated public assets with the build. Do not omit install/build lifecycle scripts without preparing these assets yourself.
+
+Preview uses live editor buffers and updates changed files for dev-server watchers. Restart server uses current edits; Reload preview refreshes the page after synchronizing files. Use Save / Save All to retain changes when reopening the playground. Plain Node servers without a watcher need Restart server to reload their JavaScript.
+
+API-only imports can return JSON instead of a UI. Import does not provision databases, environment secrets or native Node addon support. Startup failures leave the terminal visible. Backends requiring native addons (such as native bcrypt) need a regular compatible Node runtime or a separately reviewed browser-compatible adaptation.
