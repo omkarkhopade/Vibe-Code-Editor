@@ -100,3 +100,30 @@ test('model catalog endpoint requires authentication and reveals no internal end
   const anonymous = load('app/api/ai/models/route.ts', { ...mocks, '@/modules/auth/actions': { currentUser: async () => null } });
   assert.equal((await anonymous.GET(new Request('http://localhost/api/ai/models'))).status, 401);
 });
+
+
+test('gateway credentials require TLS and reach discovery and generation without redirects', async t => {
+  const previous = { base: process.env.OLLAMA_BASE_URL, key: process.env.OLLAMA_API_KEY };
+  t.after(() => {
+    for (const [name, value] of [['OLLAMA_BASE_URL', previous.base], ['OLLAMA_API_KEY', previous.key]]) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  });
+  process.env.OLLAMA_BASE_URL = 'http://gateway.invalid';
+  process.env.OLLAMA_API_KEY = 'synthetic-test-key';
+  const provider = load('modules/ai/lib/ollama.ts');
+  assert.throws(() => provider.ollamaConfig(), error => error.status === 503);
+  process.env.OLLAMA_BASE_URL = 'https://gateway.invalid';
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push(options);
+    return Response.json(url.endsWith('/api/tags') ? { models: [{ name: 'gpt-oss:20b' }] } : { response: 'OK' });
+  });
+  assert.equal(await provider.generateText('test', new AbortController().signal), 'OK');
+  assert.equal(calls.length, 2);
+  for (const options of calls) {
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.headers.Authorization, 'Bearer synthetic-test-key');
+  }
+  assert.equal(JSON.stringify(provider.ollamaConfig()).includes('synthetic-test-key'), false);
+});

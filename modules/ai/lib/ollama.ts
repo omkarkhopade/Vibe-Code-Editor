@@ -6,13 +6,18 @@ export function ollamaConfig() {
   if (!base) throw new ApiError(503, "AI backend is not configured");
   const url = new URL(base);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new ApiError(503, "Invalid AI configuration");
+  if (process.env.OLLAMA_API_KEY && url.protocol !== "https:") throw new ApiError(503, "AI gateway authentication requires HTTPS");
   const timeout = Number(process.env.OLLAMA_TIMEOUT_MS || 180000);
   if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 600000) throw new ApiError(503, "Invalid AI timeout configuration");
   return { base: base.replace(/\/$/, ""), model: process.env.OLLAMA_MODEL || "gpt-oss:20b", timeout };
 }
+function gatewayHeaders(): Record<string, string> {
+  const key = process.env.OLLAMA_API_KEY;
+  return key ? { Authorization: `Bearer ${key}` } : {};
+}
 export async function listModels(signal: AbortSignal) {
   const config = ollamaConfig();
-  const response = await fetch(config.base + "/api/tags", { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]), cache: "no-store" });
+  const response = await fetch(config.base + "/api/tags", { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]), cache: "no-store", redirect: "error", headers: gatewayHeaders() });
   if (!response.ok) throw new ApiError(503, "AI service is unavailable");
   const data = await response.json();
   if (!Array.isArray(data.models)) throw new ApiError(502, "Invalid model catalog");
@@ -34,7 +39,7 @@ export async function generateText(prompt: string, signal: AbortSignal, system?:
     const combined = AbortSignal.any([signal, AbortSignal.timeout(ollamaConfig().timeout)]);
     const config = await checkModel(combined, selectedModel);
     const response = await fetch(config.base + "/api/generate", {
-      method: "POST", signal: combined, headers: { "Content-Type": "application/json" },
+      method: "POST", signal: combined, redirect: "error", headers: { "Content-Type": "application/json", ...gatewayHeaders() },
       body: JSON.stringify({ model: config.model, prompt, system, stream: !!onToken, ...(config.model.startsWith("gpt-oss:") ? { think: "low" } : {}), keep_alive: "2m", options: { temperature: 0.3, num_predict: 1024, num_ctx: 4096 } }),
     });
     if (!response.ok) throw new ApiError(503, "AI generation failed. Please try again later.");

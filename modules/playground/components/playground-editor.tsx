@@ -3,7 +3,7 @@ import { usePreferences } from "@/modules/settings/lib/use-preferences";
 import type * as MonacoTypes from "monaco-editor";
 
 
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useLayoutEffect } from "react"
 import Editor, { loader, type Monaco } from "@monaco-editor/react"
 import { TemplateFile } from "../lib/path-to-json"
 import { configureMonaco, defaultEditorOptions, getEditorLanguage } from "../lib/editor-config"
@@ -46,7 +46,8 @@ export const PlaygroundEditor = ({
   const acceptingRef = useRef(false)
   const latestRef = useRef({ suggestion, suggestionLoading, suggestionPosition, onRejectSuggestion, onTriggerSuggestion })
 
-  useEffect(() => {
+  // Keyboard handlers must see the committed suggestion before its accept hint paints.
+  useLayoutEffect(() => {
     latestRef.current = { suggestion, suggestionLoading, suggestionPosition, onRejectSuggestion, onTriggerSuggestion }
   }, [suggestion, suggestionLoading, suggestionPosition, onRejectSuggestion, onTriggerSuggestion])
 

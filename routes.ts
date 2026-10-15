@@ -5,6 +5,7 @@
  */
 
 export const publicRoutes: string[] = [
+    "/",
     "/api/health",
     "/docs",
 
@@ -17,7 +18,8 @@ export const publicRoutes: string[] = [
  */
 
 export const protectedRoutes: string[] = [
-    "/",
+    "/dashboard",
+    "/settings",
 
 ]
 

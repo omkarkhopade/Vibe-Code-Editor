@@ -1,45 +1,78 @@
 # Deployment and operations
 
-A simple initial topology is one Node.js 24 application instance, managed MongoDB and privately reachable Ollama. Keep inference private (see [Ollama network configuration](https://docs.ollama.com/faq)); use authentication/TLS at a gateway across trust boundaries. Vercel-hosted Next.js needs a separate reachable inference service. The cloud server's loopback address is not the developer's workstation. Verify hosting duration/streaming limits against measured inference latency; streamed responses also count toward invocation duration. [Vercel function limits](https://vercel.com/docs/functions/limitations).
+Release assessment: 2026-10-15. **NOT READY for public launch.** See [final release report](final-release-report.md). No deployment has been performed. Resolve its gates before following the activation steps below.
 
-Build with package-lock, the six starter snapshots and their license. Output tracing includes those read-only assets. Playground persistence is MongoDB; no temporary output directory is required.
+## Hosting decision
 
-## Release checklist
+Preferred conditional topology: browser (Monaco and WebContainer) -> Next.js on Vercel Node.js 24 -> managed MongoDB replica set; Next.js -> authenticated HTTPS inference gateway -> private Ollama with installed `gpt-oss:20b`. The browser never receives gateway credentials or database/OAuth secrets. Vercel cannot reach the developer workstation through localhost and must not host the model in a function.
 
-1. Review unresolved advisories. The queried latest braces version remains vulnerable in the development lint chain. KaTeX is updated and compatibility tests pass. Remaining React/Vue/Next starter advisories, including a critical Next.js starter advisory, block release. See functional-completeness-report.md. Do not use npm audit fix --force to downgrade Next.js tooling.
-2. Run npm ci, npm run typecheck, npm run lint -- --max-warnings=0, npm test and npm run build in a clean environment. Google Fonts network access is required at build time. Clean installation was not tested in the existing working tree; npm ls --depth=0 verified installed consistency.
-3. Provision replica-set/TLS/network access and least-privilege MongoDB credentials. Review indexes and restore-tested backups. Obtain explicit approval before schema/index changes; none were applied here.
-4. Set production OAuth origins, AUTH_URL, secrets and OLLAMA_BASE_URL through hosting environment settings.
-5. Verify sign-in/out, ownership, create/edit/save/reopen/delete, all previews, streaming chat and cancellation in staging. Isolated browser journeys and a real dependency-free WebContainer preview pass; real OAuth, live database CRUD and all six framework previews still require staging acceptance.
-6. Review the generated desktop/editor and mobile Settings screenshots, then test the full editor on target mobile devices and with assistive technology.
-7. Obtain explicit operator approval before deploying. Verify health and full journeys after deployment, then observe error rate and latency before adding traffic.
+Vercel supports Node.js 24. Use the Next.js preset, repository root, `npm ci`, and `npm run build`; no static export. Node routes use Prisma's generated native client. Do not select Edge for database/template routes. Build on the deployment OS, never upload the Windows-generated Prisma engine. [Vercel Node versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions).
 
-## Monitoring
+**Unresolved payload incompatibility:** current validation accepts 4 MiB of raw text; JSON escaping can exceed both Next's configured 6 MB Server Action limit and Vercel's 4.5 MB payload ceiling. A measured 4 MiB quote-only tree serializes to 8,388,863 bytes. RSC responses may also expand persisted JSON. Before choosing Vercel, implement and test an agreed encoded-size contract or chunked source persistence. Do not silently truncate or reject previously stored projects by reducing their limits. This pass does not change the persistence contract.
 
-Collect sanitized request_failed events with requestId/type. Correlate to IDs in API responses. Do not log request bodies, tokens, private source trees or database URLs. Monitor 5xx/429 rates, database connectivity, inference timeouts/queues and RAM/GPU usage. Configure alerts from staging measurements; no uptime target has been measured.
+Fluid Compute's documented 300-second default accommodates the app's default 180-second inference timeout, but operators must verify actual project settings. Keep timeout below hosting/gateway limits with margin; setting `OLLAMA_TIMEOUT_MS=600000` on a 300-second function is invalid operationally. Streaming counts toward duration. The normal uncompressed function ceiling is 250 MB; local Windows traces measured about 85.2 MB maximum and 84.9 MB for the template route, including 52 starter files with no missing trace files. These are estimates, not a Vercel/Linux deployment artifact certification. [Vercel function limits](https://vercel.com/docs/functions/limitations).
 
-Use /api/health for liveness and an authenticated session for readiness. Configure database driver connection/server-selection timeouts for the deployment. Readiness can take longer than liveness and model presence does not establish inference capacity. Generation retries are deliberately omitted to prevent duplicate expensive work.
+If preserving larger snapshots is required without a persistence change, the simplest hosting alternative is one managed Node.js 24 VM/container, TLS reverse proxy, MongoDB, and private inference. The local 6 MB encoded-body issue must still be resolved with an agreed bounded limit and MongoDB document-size checks. Configure proxy body/time limits consistently. Run `npm ci`, `npm run build`, `npm start` under a process supervisor. No migration to this option is authorized or performed.
 
-## Remaining boundaries
+## Environment inventory
 
-Rate limits and inference admission are per process. Multiple replicas require shared controls at the inference gateway; no Redis/queues were added without a demonstrated deployment need.
+Set values in hosting secret storage. Never copy local `.env` files into source control, browser code, build artifacts or diagnostics. None of these variables uses `NEXT_PUBLIC_`.
 
-Save All commits one combined snapshot. Content-derived revisions plus an atomic persisted-content comparison reject stale cross-tab saves. No schema fields or indexes changed. Users must resolve conflicts by reopening current saved content and reapplying their changes; do not silently discard their unsaved buffer.
+| Name | Local | Staging / production |
+| --- | --- | --- |
+| `DATABASE_URL` | Development replica set | Separate TLS MongoDB database and least-privilege user per environment |
+| `AUTH_SECRET` | Local random secret | Independent high-entropy secret per environment; keep stable across replicas |
+| `AUTH_URL` | `http://localhost:3000` | Exact canonical HTTPS origin |
+| `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET` | Local OAuth application | Separate registered application credentials for stable staging / production origins |
+| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Local OAuth client | Separate staging / production OAuth credentials |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Private reachable endpoint or authenticated HTTPS gateway URL |
+| `OLLAMA_API_KEY` | Omit for local Ollama | Server-only bearer secret validated by the HTTPS gateway |
+| `OLLAMA_MODEL` | `gpt-oss:20b` | Same installed model; no automatic substitution |
+| `OLLAMA_ALLOWED_MODELS` | Optional installed-model list | Explicit comma-separated installed models permitted for users; blank permits all installed models |
+| `OLLAMA_TIMEOUT_MS` | `180000` default | Match verified gateway and function budget; parser accepts 1000..600000 ms |
+| `NODE_ENV` | Managed by Next development | Production, normally managed by host |
 
-Generated code, starter npm lifecycle scripts and terminal commands execute in the browser WebContainer. Never move these operations onto the host. Historical starter snapshots are not certified for production deployment. Binary assets remain limited by the legacy text-only template schema; binary round trips need a versioned encoding contract.
+`TEST_PREVIEW` and `PLAYWRIGHT_CHANNEL` are test-only. Never install the synthetic browser fixture as a production preload. CI uses dummy `DATABASE_URL` and `AUTH_SECRET` and requires no production credentials. Build downloads Google Fonts and npm dependencies. Normal install/prebuild generates Prisma and copies the installed Monaco assets and license to `public/monaco`. Its narrowly guarded Monaco 0.57.0 workaround fails on incompatible upgrades; review it before changing Monaco.
 
-Chat selects from installed/permitted Ollama models and sends the selected model to inference. OLLAMA_MODEL remains the completion/default model. OLLAMA_ALLOWED_MODELS optionally limits selection; an empty value means all installed models. Durable chat autosave, cloud providers and external monitoring services were not introduced. Docker/Kubernetes are not necessary for this initial topology and were not added.
+## Database and authentication
 
-## References
+Provision a replica set with TLS, restricted network access, a dedicated application database/user, connection limits and backups. Configure supported MongoDB driver connection/server-selection timeouts and pool sizes for expected concurrency; do not apply PostgreSQL pooling parameters. Prisma's MongoDB connector uses the MongoDB driver pool. Keep the singleton client; function instances still have separate pools. [Prisma v6 pool documentation](https://www.prisma.io/docs/orm/v6/prisma-client/setup-and-configuration/databases-connections/connection-pool).
 
-Auth.js does not automatically link accounts solely by email; account lifecycle now uses its adapter: [Auth.js errors](https://authjs.dev/reference/core/errors). Ollama options/framing follow its [API documentation](https://github.com/ollama/ollama/blob/main/docs/api.md). Route params and output tracing were checked against installed Next.js docs under node_modules/next/dist/docs.
+No migrations, resets or schema pushes are part of deployment here. Review the existing schema's unique/index requirements separately with a backup and explicit approval. Verify nested create/duplicate and source compare-and-swap against an isolated real staging replica set before release. The current local read-only ping failed; fixture CRUD does not prove database readiness.
 
-## Generated editor assets and browser checks
+Choose `https://staging.example.com` and the final production origin before registering OAuth. Replace example domains with the actual chosen origins:
 
-Normal install/prebuild prepares `public/monaco/` from the installed Monaco version, including its license. Ship that directory with other public assets. `scripts/prepare-monaco.mjs` contains a guarded 0.57.0 accessibility-cancellation workaround; review/remove it when upgrading Monaco. Unexpected runtime errors are not suppressed.
+- GitHub homepage: the origin; callback: `https://<origin-host>/api/auth/callback/github`.
+- Google authorized JavaScript origin: the origin; exact redirect URI: `https://<origin-host>/api/auth/callback/google`. Configure consent/publishing and test users appropriately.
+- Set `AUTH_URL` to that same origin. Use a stable staging domain instead of arbitrary per-PR callbacks.
+- Do not add blanket trusted-host settings. The reverse proxy must reject unknown hosts and overwrite forwarded host/protocol headers. Vercel's recognized environment is supported by Auth.js; verify `/api/auth/session` and real provider round trips on the target domain. [Auth.js deployment](https://authjs.dev/getting-started/deployment).
+- Test sign-in, refresh, sign-out and cross-account ownership. Do not enable automatic email-based linking. Verify Settings shows the expected GitHub identity after reconnect. Tokens stay in server-side account storage; restrict DB access and backups accordingly.
+- Private repository import only works if the stored GitHub credential already has the required repository/organization grant. Current default OAuth login does not request broad `repo` scope. If private import is a release requirement, agree on a consent/access design and verify it with a dedicated private test repository. Do not silently broaden permissions.
 
-After building, `npm run test:browser` uses a synthetic identity/database and provider fixtures on port 3107. Chrome must be installed; `PLAYWRIGHT_CHANNEL` can select another installed compatible channel. `TEST_PREVIEW=1` also exercises the real browser runtime and requires network access to StackBlitz/npm. It never executes imported projects on the host. CI runs fixture browser checks and retains the full dependency audit gate.
+## Inference service
 
-On Windows, a running application can lock Prisma's native client during prebuild. Stop your own development server before `npm run build`. Earlier direct `npx next build` checks used the existing client; the final normal `npm run build` also passed Prisma generation. Neither establishes a clean dependency installation.
+Keep Ollama bound to loopback/private networking. For cross-network access, use TLS and a gateway that verifies `OLLAMA_API_KEY`, allows only required `/api/tags` and `/api/generate` operations, enforces body limits, controls concurrent work, and forwards cancellation. Block public access to port 11434 and model-management endpoints. Disable proxy response buffering, use suitable upstream timeouts, and do not log prompts, source or authorization headers. The app rejects redirects and refuses sending its bearer key over HTTP. An optional key in the app does not secure an unconfigured gateway. [Ollama network and concurrency configuration](https://docs.ollama.com/faq).
 
-Release status and manual acceptance steps: [functional completeness report](functional-completeness-report.md). Do not deploy while that report's release blockers remain unresolved.
+The installed model file is 13,793,441,566 bytes, consistent with the approximately 14 GB published artifact. Runtime memory additionally needs KV cache, compute buffers, OS and application headroom. The development machine's approximately 14 GB RAM / 2 GB VRAM is not demonstrated production capacity. Select hardware only after a staging benchmark with the current 4096-token context and 1024-token output cap; record cold/warm first-token latency, total latency, peak RAM/VRAM and queue depth. [Ollama model catalog](https://ollama.com/library/gpt-oss).
+
+This pass measured a trivial local streamed response at 80.084 seconds, first response token at 79.653 seconds. That proves connectivity, not acceptable completion latency or concurrency. Admission and 10/user/min rate limits are process-local; Vercel replicas need shared abuse controls and global inference concurrency limits. Initially serialize work at the gateway with a bounded queue/rejection response and measure capacity before raising it. No GPU service or gateway has been provisioned.
+
+## Browser isolation and assets
+
+Preserve COOP `same-origin`, COEP `require-corp`, `X-Content-Type-Options: nosniff`, and the current referrer policy on routes. Serve HTTPS and verify `crossOriginIsolated` in the target browser after any CDN/proxy changes. WebContainers run user code in the browser, never on the Next server. Their service-worker/network and browser compatibility requirements still apply. [WebContainer headers](https://webcontainers.io/guides/configuring-headers), [browser support](https://webcontainers.io/guides/browser-support).
+
+Deploy all six starter snapshots and their licenses; `outputFileTracingIncludes` covers the template route. The real Node fixture preview is verified, not all six framework dependency installations. Native-addon backends such as the user's project-camp-api need a normal Node environment and their own configured database/secrets; a browser preview cannot certify arbitrary repositories. Binary assets are excluded by the current text-only import contract.
+
+## Release, monitoring and rollback
+
+1. Resolve the security, transport, real-service and acceptance blockers in the release report. CI must pass: install, typecheck, zero-warning lint, tests, build, fixture browser tests, root and six starter audits. Do not bypass the currently failing security gates.
+2. Obtain explicit deployment authorization. Configure an isolated staging database, provider applications, inference gateway, stable domain and secret scopes. Keep production secrets out of preview deployments.
+3. Build a reviewed revision on Linux/Node 24. Record commit, lockfile, build identity, environment-version references and rollback candidate. Verify asset traces and platform limits there.
+4. Configure domain/DNS using the host-provided records; verify TLS issuance and canonical redirect, then callback URLs. Do not point public traffic to an unverified deployment.
+5. Run all 20 acceptance cases in the release report with dedicated staging data. Include another account attempting unauthorized access, conflicting saves, near-limit source payloads, private repository access if promised, real inference cancellation, missing model, and each supported framework preview. Verify mobile layout and browser console errors.
+6. Monitor unauthenticated `/api/health` for liveness. Authenticated `/api/health?ready=1` checks database and model availability; a successful response is not an inference performance test. Protect monitoring session credentials. Alert on sanitized request IDs/types, 5xx/429, save failures, database pool/connect latency, inference timeouts, queue depth and GPU/RAM pressure. No external monitoring is currently provisioned.
+7. Enable encrypted MongoDB backups with an owner, retention policy and recovery targets. Test restore into a separate database and verify account/project counts and sample sources. Never restore over production as an experiment. Back up deployment configuration and gateway configuration without putting secrets in Git.
+8. After staging approval, obtain production deployment approval, promote the tested artifact, rerun acceptance and observe latency/error rates before increasing traffic. No production verification is claimed in this repository.
+9. Rollback on failed auth, ownership, save/persistence, unavailable inference or elevated errors: stop promotion/traffic expansion; switch the host alias to the recorded known-good deployment (or previous supervised Node release); restore its compatible environment/gateway configuration; rerun liveness, auth and save/read checks. Code rollback does not undo MongoDB writes. No schema change is included here. For data corruption, preserve evidence and take a fresh backup; restore only through a separately approved recovery procedure. Record incident and avoid retries that overwrite newer source.
+
+Windows local note: a running dev server may lock Prisma's DLL. Stop that server yourself before a local rebuild, or use an isolated copy. The final release clean install/build passed in an isolated directory with dummy database configuration; the original workspace's prebuild remained locked.

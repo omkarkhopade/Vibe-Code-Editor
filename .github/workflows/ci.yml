@@ -26,3 +26,12 @@ jobs:
           name: browser-results
           path: test-results/
       - run: npm audit --audit-level=high
+      - name: Audit shipped starter dependencies
+        if: always()
+        shell: bash
+        run: |
+          status=0
+          for starter in react-ts nextjs express-simple vue hono-nodejs-starter angular; do
+            npm audit --prefix "vibecode-starters/$starter" --audit-level=high || status=1
+          done
+          exit "$status"

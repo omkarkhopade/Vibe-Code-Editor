@@ -4,7 +4,7 @@ import { encode } from 'next-auth/jwt';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 const origin = 'http://localhost:3107', secret = 'browser-fixture-secret-not-for-deployment';
-const server = spawn(process.execPath, ['--require', path.resolve('tests/browser/fixture.cjs'), 'node_modules/next/dist/bin/next', 'start', '--port', '3107'], { windowsHide: true, env: { ...process.env, NODE_ENV: 'production', AUTH_URL: origin, AUTH_SECRET: secret, DATABASE_URL: 'mongodb://127.0.0.1:1/isolated_browser_fixture', OLLAMA_BASE_URL: 'http://fixture-ollama.invalid', OLLAMA_MODEL: 'gpt-oss:20b', OLLAMA_ALLOWED_MODELS: 'gpt-oss:20b,fixture:small' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn(process.execPath, ['--require', path.resolve('tests/browser/fixture.cjs'), 'node_modules/next/dist/bin/next', 'start', '--port', '3107'], { windowsHide: true, env: { ...process.env, NODE_ENV: 'production', AUTH_URL: origin, AUTH_SECRET: secret, DATABASE_URL: 'mongodb://127.0.0.1:1/isolated_browser_fixture', OLLAMA_BASE_URL: 'http://fixture-ollama.invalid', OLLAMA_API_KEY: '', OLLAMA_MODEL: 'gpt-oss:20b', OLLAMA_ALLOWED_MODELS: 'gpt-oss:20b,fixture:small' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let logs = ''; server.stdout.on('data', data => { logs += data; }); server.stderr.on('data', data => { logs += data; });
 let browser, page; const browserErrors = [];
 try {
@@ -16,6 +16,8 @@ try {
  page = await context.newPage(); page.setDefaultTimeout(20000); page.on('pageerror', error => { browserErrors.push(error.message); console.log('BROWSER ERROR', error.stack); }); page.on('requestfailed', request => { if (request.failure()?.errorText !== 'net::ERR_ABORTED') console.log('REQUEST FAILED', request.url(), request.failure()?.errorText); });
  await fs.mkdir('test-results', { recursive: true });
  await page.goto(origin + '/');
+ await expect(page.getByRole('heading', { name: 'Vibe Code With Intelligence', exact: true })).toBeVisible();
+ console.log('PASS exact homepage heading');
  const previousTheme = await page.locator('html').getAttribute('class');
  await page.getByRole('button',{name:'Toggle color theme',exact:true}).click();
  await expect(page.locator('html')).not.toHaveAttribute('class', previousTheme || '');
@@ -241,11 +243,16 @@ try {
  await page.screenshot({ path: 'test-results/settings-mobile.png', fullPage: true });
  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
- await expect(page).toHaveURL(/\/auth\/sign-in/);
+ await expect(page).toHaveURL(origin + '/');
  console.log('PASS mobile settings and real session sign-out');
  for (const endpoint of ['/api/ai/models', '/api/github/connection', '/api/github/repositories']) expect((await page.request.get(origin + endpoint)).status()).toBe(401);
  expect((await page.request.post(origin + '/api/github/import', { data: { repository: 'https://github.com/fixture/node-project' } })).status()).toBe(401);
  console.log('PASS unauthenticated endpoint guards');
+ await page.goto(origin + '/');
+ await expect(page.getByRole('heading', { name: 'Vibe Code With Intelligence', exact: true })).toBeVisible();
+ await page.getByRole('link', { name: 'Get Started', exact: true }).click();
+ await expect(page).toHaveURL(/\/auth\/sign-in/);
+ console.log('PASS anonymous homepage and protected Get Started destination');
  expect(browserErrors).toEqual([]);
  console.log('PASS no uncaught browser errors');
 } catch (error) { console.error(error); if(page) { console.error((await page.locator('body').innerText()).slice(0,6000)); await page.screenshot({path:'test-results/failure.png',fullPage:true}); } console.error(logs.slice(-6000)); process.exitCode = 1; }
