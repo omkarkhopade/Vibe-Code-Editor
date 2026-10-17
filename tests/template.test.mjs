@@ -74,3 +74,10 @@ test('scanner excludes secrets and symlinks and propagates missing directory err
   await assert.rejects(scanTemplateDirectory(path.join(directory, 'absent')));
   await assert.rejects(scanTemplateDirectory(directory, { maxFileSize: 1 }), /size limit/);
 });
+
+
+test('starter snapshots retain the audited npm lockfile', async () => {
+  const { scanTemplateDirectory } = load('modules/playground/lib/path-to-json.ts');
+  const result = await scanTemplateDirectory(path.resolve('vibecode-starters/react-ts'));
+  assert.ok(result.items.some(item => item.filename === 'package-lock' && item.fileExtension === 'json'));
+});

@@ -1,4 +1,4 @@
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { getAllPlaygroundForUser } from "@/modules/dashboard/actions";
 import { DashboardSidebar } from "@/modules/dashboard/components/dashboard-sidebar";
 
@@ -35,7 +35,10 @@ export default async function DashboardLayout({
     <div className="flex min-h-screen w-full overflow-x-hidden">
       {/* Dashboard Sidebar */}
       <DashboardSidebar initialPlaygroundData={formattedPlaygroundData}/>
-      <main className="flex-1">{children}</main>
+      <main className="min-w-0 flex-1">
+        <div className="px-4 pt-4 md:hidden"><SidebarTrigger /></div>
+        {children}
+      </main>
     </div>
   </SidebarProvider>
   )

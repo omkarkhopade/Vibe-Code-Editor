@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+export const maxDuration = 300;
 import { z } from "zod";
 import { readAIRequest } from "@/modules/ai/lib/request";
 import { generateText } from "@/modules/ai/lib/ollama";

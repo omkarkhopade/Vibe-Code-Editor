@@ -1,4 +1,5 @@
 ﻿import { z } from "zod";
+import { packSource } from "@/modules/playground/lib/source-codec";
 import { currentUser } from "@/modules/auth/actions";
 import { db } from "@/lib/db";
 import { ApiError, errorResponse } from "@/lib/api-error";
@@ -6,6 +7,7 @@ import { readJsonBody } from "@/lib/json-body";
 import { importRepository } from "@/modules/github/lib/import-repository";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 const schema = z.object({ repository: z.string().max(300), ref: z.string().trim().max(200).optional() });
 const imports = new Map<string, number>();
 export async function POST(request: Request) {
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
       description: `Imported from ${imported.source} at ${String(imported.commit).slice(0, 12)}`,
       template: imported.template,
       userId,
-      templateFiles: { create: { content: JSON.stringify(imported.root) } },
+      templateFiles: { create: { content: packSource(imported.root) } },
     }, select: { id: true } });
     return Response.json({ id: playground.id, files: imported.files, skipped: imported.skipped }, { status: 201 });
   } catch (error) {

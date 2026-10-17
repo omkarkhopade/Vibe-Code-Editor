@@ -11,8 +11,31 @@ function create(data) {
  projects.set(id, p); return structuredClone(p);
 }
 create({ title: 'Browser fixture', userId: user.id });
+if (process.env.BROWSER_STARTER) { const project = [...projects.values()][0]; project.template = process.env.BROWSER_STARTER; project.templateFiles = []; }
 function owned(where) { const p = projects.get(where.id); return p && (!where.userId || p.userId === where.userId) ? p : null; }
+const uploads = new Map();
+async function sourceCommand(command) {
+ if (command.insert === 'SourceUpload') {
+  const document = structuredClone(command.documents[0]);
+  if (uploads.has(document._id)) return { ok: 1, writeErrors: [{ code: 11000 }] };
+  uploads.set(document._id, document); return { ok: 1, n: 1 };
+ }
+ if (command.delete === 'SourceUpload') {
+  const query = command.deletes[0].q, document = uploads.get(query._id);
+  if (document && (!query.uploadId || document.uploadId === query.uploadId) && (!query.projectId || document.projectId === query.projectId) && (!query.expiresAt || document.expiresAt.$date <= query.expiresAt.$lte.$date)) uploads.delete(query._id);
+  return { ok: 1 };
+ }
+ if (command.findAndModify === 'SourceUpload') {
+  const query = command.query, document = uploads.get(query._id);
+  if (!document || document.projectId !== query.projectId || document.uploadId !== query.uploadId || document.expiresAt.$date <= query.expiresAt.$gt.$date || (query.nextChunk !== undefined && document.nextChunk !== query.nextChunk) || (query.totalChunks && document.totalChunks <= query.totalChunks.$gt) || (query.$expr && document.nextChunk !== document.totalChunks)) return { ok: 1, value: null };
+  if (command.remove) uploads.delete(query._id);
+  else { document.chunks.push(command.update.$push.chunks); document.nextChunk++; }
+  return { ok: 1, value: structuredClone(document) };
+ }
+ return { ok: 1 };
+}
 const db = {
+ $runCommandRaw: sourceCommand,
  user: { findUnique: async ({ where }) => where.id === user.id ? structuredClone(user) : null, update: async ({ where, data }) => { if (where.id !== user.id) throw new Error('Denied'); Object.assign(user, data); return user; } },
  account: { findFirst: async () => ({ access_token: 'synthetic-fixture-token', expires_at: null }), updateMany: async () => ({ count: 1 }) },
  playground: {

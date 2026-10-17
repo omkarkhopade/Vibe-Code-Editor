@@ -14,6 +14,7 @@ try {
  const name = 'authjs.session-token';
  await context.addCookies([{ name, value: await encode({ secret, salt: name, token: { sub: 'cmtestuser0000000000000001', name: 'Browser Tester', email: 'browser@example.invalid', role: 'USER' } }), url: origin }]);
  page = await context.newPage(); page.setDefaultTimeout(20000); page.on('pageerror', error => { browserErrors.push(error.message); console.log('BROWSER ERROR', error.stack); }); page.on('requestfailed', request => { if (request.failure()?.errorText !== 'net::ERR_ABORTED') console.log('REQUEST FAILED', request.url(), request.failure()?.errorText); });
+ page.on('console', message => { if (message.type() === 'error' && /hydration|did not match|cannot be a descendant/i.test(message.text())) browserErrors.push(message.text()); });
  await fs.mkdir('test-results', { recursive: true });
  await page.goto(origin + '/');
  await expect(page.getByRole('heading', { name: 'Vibe Code With Intelligence', exact: true })).toBeVisible();
@@ -30,6 +31,14 @@ try {
  await page.goto(origin + '/dashboard');
  await expect(page.getByRole('link', { name: 'Browser fixture', exact: true }).last()).toBeVisible();
  console.log('PASS authenticated dashboard renders synthetic project');
+ await page.setViewportSize({ width: 390, height: 844 });
+ await page.getByRole('button', { name: 'Toggle Sidebar', exact: true }).click();
+ await expect(page.getByRole('dialog').getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
+ await page.getByRole('dialog').getByRole('link', { name: 'Settings', exact: true }).click();
+ await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+ await page.setViewportSize({ width: 1440, height: 1000 });
+ await page.goto(origin + '/dashboard');
+ console.log('PASS mobile dashboard sidebar navigation');
  await page.getByRole('link', { name: 'Settings', exact: true }).click();
  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
  await page.getByLabel('Display name').fill('Updated Browser Tester');

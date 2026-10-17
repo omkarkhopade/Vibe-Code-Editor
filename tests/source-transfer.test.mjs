@@ -1,0 +1,48 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { gzipSync } from 'node:zlib';
+import load from './load-ts.mjs';
+const tree = { folderName: 'root', items: [{ filename: 'app', fileExtension: 'js', content: 'hello' }] };
+test('source codec preserves legacy and compressed snapshots, including maximum escaped source', () => {
+ const codec = load('modules/playground/lib/source-codec.ts');
+ assert.deepEqual(codec.unpackSource(JSON.stringify(tree)), tree);
+ const large = { ...tree, items: [{ ...tree.items[0], content: '\0'.repeat(4 * 1024 * 1024) }] };
+ assert.ok(Buffer.byteLength(JSON.stringify(large)) > 16 * 1024 * 1024);
+ const packed = codec.packSource(large);
+ assert.ok(packed.length < codec.MAX_PACKED_CHARS);
+ assert.deepEqual(codec.unpackSource(packed), large);
+ assert.deepEqual(codec.unpackSource(codec.packSource({ ...tree, untrusted: 'ignored' })), tree);
+ assert.throws(() => codec.unpackSource(codec.SOURCE_PREFIX + 'not-base64!'));
+ assert.throws(() => codec.unpackSource(codec.SOURCE_PREFIX + gzipSync(' '.repeat(codec.MAX_JSON_BYTES + 1)).toString('base64')));
+});
+test('source endpoint rejects anonymous, foreign, cross-origin and oversized uploads before storage', async () => {
+ const context = { params: Promise.resolve({ id: 'cmfixture0000000000000001' }) };
+ const path = 'app/api/playground/[id]/source/route.ts'; let writes = 0;
+ const mocks = { '@/modules/auth/actions': { currentUser: async () => ({ id: 'owner' }) }, '@/lib/db': { db: { playground: { findUnique: async () => null }, $runCommandRaw: async () => { writes++; } } } };
+ const foreign = load(path, mocks);
+ assert.equal((await foreign.GET(new Request('http://local/api/source'), context)).status, 404);
+ const request = (body, origin = 'http://local') => new Request('http://local/api/source', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body });
+ assert.equal((await foreign.POST(request('{}', 'https://evil.invalid'), context)).status, 403);
+ const anonymous = load(path, { ...mocks, '@/modules/auth/actions': { currentUser: async () => null } });
+ assert.equal((await anonymous.POST(request('{}'), context)).status, 401);
+ mocks['@/lib/db'].db.playground.findUnique = async () => ({ id: 'cmfixture0000000000000001', title: 'test' });
+ assert.equal((await foreign.POST(request('x'.repeat(1024 * 1024 + 4096)), context)).status, 413);
+ assert.equal(writes, 0);
+});
+test('chunk uploads bind account, project, order and expiry; incomplete uploads never commit', async () => {
+ const commands = []; let result = { ok: 1, value: null };
+ const upload = load('modules/playground/lib/source-upload.ts', { '@/lib/db': { db: { $runCommandRaw: async command => { commands.push(command); return result; } } } });
+ const started = await upload.beginUpload('owner', 'project', null, upload.CHUNK_CHARS + 1);
+ assert.equal(started.totalChunks, 2);
+ assert.equal(commands.find(command => command.insert).documents[0]._id, 'owner');
+ assert.equal(commands.find(command => command.insert).documents[0].projectId, 'project');
+ await assert.rejects(upload.appendUpload('owner', 'project', started.uploadId, 1, 'bad'), e => e.status === 409);
+ assert.equal(commands.at(-1).query.nextChunk, 1);
+ assert.ok(commands.at(-1).query.expiresAt.$gt.$date);
+ await assert.rejects(upload.takeUpload('owner', 'project', started.uploadId), e => e.status === 409);
+ assert.deepEqual(commands.at(-1).query.$expr, { $eq: ['$nextChunk', '$totalChunks'] });
+ await upload.abortUpload('owner', 'project', started.uploadId);
+ assert.deepEqual(commands.at(-1).deletes[0].q, { _id: 'owner', projectId: 'project', uploadId: started.uploadId });
+ result = { ok: 1, writeErrors: [{ code: 11000 }] };
+ await assert.rejects(upload.beginUpload('owner', 'other', null, 1), e => e.status === 409);
+});

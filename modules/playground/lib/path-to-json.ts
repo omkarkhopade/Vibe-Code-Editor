@@ -7,7 +7,7 @@ interface ScanOptions { ignoreFiles?: string[]; ignoreFolders?: string[]; ignore
 export async function scanTemplateDirectory(templatePath: string, options: ScanOptions = {}): Promise<TemplateFolder> {
   if (!templatePath) throw new Error("Template path is required");
   const root = await fs.realpath(templatePath);
-  const ignoredFiles = new Set(["package-lock.json", "yarn.lock", ".DS_Store", "thumbs.db", ".gitignore", ".npmrc", ".yarnrc", ...options.ignoreFiles || []]);
+  const ignoredFiles = new Set(["yarn.lock", ".DS_Store", "thumbs.db", ".gitignore", ".npmrc", ".yarnrc", ...options.ignoreFiles || []]);
   const ignoredFolders = new Set(["node_modules", ".git", ".vscode", ".idea", "dist", "build", "coverage", ".next", ...options.ignoreFolders || []]);
   const patterns = [/^\.env(?:\.|$)/, /\.(?:pem|key)$/i, /^\..+\.swp$/, /^\.#/, /~$/, ...options.ignorePatterns || []];
   let bytes = 0; let count = 0;

@@ -62,7 +62,7 @@ test('import route authenticates and creates owned playground/source atomically'
   const { POST } = load('app/api/github/import/route.ts', mocks);
   const request = () => new Request('http://localhost/api/github/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repository: 'https://github.com/example/project' }) });
   assert.equal((await POST(request())).status, 201);
-  assert.equal(created.userId, owner); assert.deepEqual(JSON.parse(created.templateFiles.create.content), source);
+  assert.equal(created.userId, owner); assert.deepEqual(load('modules/playground/lib/source-codec.ts').unpackSource(created.templateFiles.create.content), source);
   assert.equal((await POST(request())).status, 429);
   const anonymous = load('app/api/github/import/route.ts', { ...mocks, '@/modules/auth/actions': { currentUser: async () => null } });
   assert.equal((await anonymous.POST(request())).status, 401);

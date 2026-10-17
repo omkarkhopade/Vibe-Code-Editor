@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+export const maxDuration = 300;
 import { CHAT_SYSTEM_PROMPT } from "@/modules/ai/lib/prompts";
 import { z } from "zod";
 import { readAIRequest } from "@/modules/ai/lib/request";

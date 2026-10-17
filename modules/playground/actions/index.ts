@@ -4,16 +4,17 @@ import type { TemplateFolder } from "../lib/path-to-json";
 import { isTemplateFolder } from "../lib/validation";
 import { requirePlaygroundOwner } from "@/lib/playground-access";
 import { sourceRevision } from "../lib/revision";
+import { packSource } from "../lib/source-codec";
 export async function getPlaygroundById(id: string) {
   const userId = await requirePlaygroundOwner(id);
   const project = await db.playground.findUnique({ where: { id, userId }, select: { id: true, title: true, templateFiles: { select: { content: true } } } });
-  return project ? { ...project, revision: sourceRevision(project.templateFiles[0]?.content) } : null;
+  return project ? { id: project.id, title: project.title, hasSavedSource: project.templateFiles.length > 0, revision: sourceRevision(project.templateFiles[0]?.content) } : null;
 }
 export async function SaveUpdatedCode(playgroundId: string, data: TemplateFolder, expectedRevision: string | null) {
   const userId = await requirePlaygroundOwner(playgroundId);
   if (!isTemplateFolder(data)) throw new Error("Invalid template structure or project exceeds 4 MB");
   if (expectedRevision !== null && (typeof expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(expectedRevision))) throw new Error("Reload the project before saving");
-  const content = JSON.stringify(data);
+  const content = packSource(data);
   const current = await db.templateFile.findUnique({ where: { playgroundId }, select: { content: true } });
   if (sourceRevision(current?.content) !== expectedRevision) throw new Error("This project changed in another tab. Copy your unsaved edits, then reload before saving.");
   // The source comparison is part of the write, so competing requests cannot overwrite one another.
